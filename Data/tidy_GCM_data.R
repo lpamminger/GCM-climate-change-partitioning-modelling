@@ -13,12 +13,12 @@ library(arrow)
 hist_precip_file_names <- dir(
   "./Data/Raw/NCI_CMIP6_CMIP_Amon_pr_20211112/",
   full.names = TRUE
-) 
+)
 
 hist_nat_precip_file_names <- dir(
   "./Data/Raw/NCI_CMIP6_DAMIP_Amon_pr_20211112/",
   full.names = TRUE
- ) # remove this
+) # remove this
 
 
 
@@ -92,7 +92,7 @@ warm_seasons <- c(10, 11, 12, 1, 2, 3)
 
 simplify_GCM_data <- function(file_names, chunk) {
   gc()
-  
+
   do.call(
     rbind,
     c(lapply(file_names, add_columns_using_GCM_details), row.names = NULL)
@@ -134,7 +134,7 @@ simplify_GCM_data <- function(file_names, chunk) {
       cols = all_of(catchment_ids),
       names_to = "gauge",
       values_to = "precipitation_mm"
-    ) |> 
+    ) |>
     # aggregate into seasons (warm/cool)
     mutate(
       season = case_when(
@@ -142,11 +142,11 @@ simplify_GCM_data <- function(file_names, chunk) {
         month %in% warm_seasons ~ "warm_season",
         .default = NA
       )
-    ) |> 
+    ) |>
     summarise(
       season_precipitation_mm = sum(precipitation_mm),
       .by = c(year, GCM, ensemble_id, experiment, realisation, gauge, season)
-    ) |> 
+    ) |>
     write_parquet(
       sink = paste0("./Data/Tidy/GCMs/precip_chunk_", chunk, ".parquet")
     )
@@ -158,9 +158,9 @@ precip_file_names <- c(hist_precip_file_names, hist_nat_precip_file_names)
 
 ## Chunk files for repetition ==================================================
 # all paths = 676,  388 too much,  169 is too much, 85 = 0.8 Mb
-chunk_length = 28L # 1064 / 14 ~ 76 per chunk is good
-chunks <- seq(from = 1, to = chunk_length) |> 
-  rep(each = length(precip_file_names)/chunk_length) |> 
+chunk_length <- 28L # 1064 / 14 ~ 76 per chunk is good
+chunks <- seq(from = 1, to = chunk_length) |>
+  rep(each = length(precip_file_names) / chunk_length) |>
   as.factor()
 
 chunked_file_names <- split(x = precip_file_names, f = chunks)
@@ -173,14 +173,14 @@ iwalk(
 )
 
 ## Step 2. Combine chunked files and save a larger file ========================
-### and Remove chunked files 
+### and Remove chunked files
 ### Limited RAM means I cannot do step 1 and 2 together
 
 tidy_GCM_data <- open_dataset(
   sources = "./Data/Tidy/GCMs",
   format = "parquet"
-) |> 
-  collect() |> 
+) |>
+  collect() |>
   pivot_wider(
     names_from = experiment,
     values_from = season_precipitation_mm
@@ -195,10 +195,3 @@ write_dataset(
 )
 
 # Remove GCMs folder manually
-
-
-
-
-
-
-
