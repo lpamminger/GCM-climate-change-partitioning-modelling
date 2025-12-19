@@ -16,7 +16,7 @@ library(arrow)
 ### From previous paper get evidence ratio > 10 (moderate)
 ### This will be used to filter observed and GCM precipitation
 best_CO2_non_CO2_per_gauge <- read_csv(
-  "./Data/Previous_Results/best_CO2_non_CO2_per_catchment_CMAES.csv",
+  "./Previous/Results/best_CO2_non_CO2_per_catchment_CMAES.csv",
   show_col_types = FALSE
 )
 
