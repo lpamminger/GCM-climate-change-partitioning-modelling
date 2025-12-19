@@ -7,6 +7,9 @@ pacman::p_load(tidyverse, truncnorm, sloop, arrow, furrr)
 
 
 
+### THE START STOP INDEXES ARE BROKEN ###
+# I must either preserve the length in data - better more conistent 
+# Dynamically calculate start_stop_indexes
 
 
 # Import functions -------------------------------------------------------------
@@ -126,6 +129,19 @@ observed_rainfall_data <- data |>
   )
 
 
+
+### To ensure same length of timeseries everything must have the same length as observed
+### This ensures start_stop_index functions correctly
+min_year <- observed_rainfall_data |> 
+  summarise(
+    min_year = min(year),
+    .by = gauge
+  ) |> 
+  pull(min_year) |> 
+  unique()
+# All gauges have a start 1959
+
+
 ### rbind
 observed_other_data <- data |>
   select(!c(p_mm, standardised_warm_season_to_annual_rainfall_ratio))
@@ -143,12 +159,13 @@ all_data <- prepared_GCM_rainfall |>
   rename(
     p_mm = annual_scaled_hist_nat_rainfall
   ) |>
-  # drop NA - occur when there is no observed data (i.e., mainly before 1960s)
-  drop_na() |>
   # make year an integer to make catchment_data_blueprint happy
   mutate(
     year = as.integer(year)
-  )
+  ) |> 
+  # set min year to ensure start_stop_index works correctly
+  filter(year >= min_year)
+
 
 
 ## Build catchment_data_set objects ============================================
@@ -157,7 +174,8 @@ all_data <- prepared_GCM_rainfall |>
 GCM_catchment_data_blueprint <- function(GCM, ensemble_id, gauge_ID, data, start_stop_indexes) {
   filtered_observed_data <- data |>
     filter(GCM == {{ GCM }}) |>
-    filter(ensemble_id == {{ ensemble_id }})
+    filter(ensemble_id == {{ ensemble_id }}) |> 
+    filter(gauge == {{ gauge_ID }})
 
   
   catchment_data_result <- catchment_data_blueprint(
@@ -180,6 +198,7 @@ unique_GCMs_ensemble_gauge_combinations <- all_data |>
   distinct() |>
   unclass() |>
   unname()
+
 
 
 ### Mass catchment_data objects using GCM and observed #########################
@@ -305,3 +324,28 @@ write_parquet(
   regenerated_streamflow_data,
   sink = "./Results/hist_nat_streamflow_data.parquet"
 )
+
+
+
+### Testing
+
+### The GCM produce different rainfalls
+### observed = observed rainfall
+### All results show streamflow without the impact of the partitioning parameter
+### TODO:
+### Make graphs
+
+testing <- open_dataset(
+  source = "./Results/hist_nat_streamflow_data.parquet"
+) |> 
+  collect()
+
+testing |> 
+  filter(gauge == "A2390523") |> 
+  ggplot(aes(x = year, y = realspace_streamflow, colour = ensemble_id)) +
+  geom_line(show.legend = FALSE) +
+  theme_bw() +
+  facet_wrap(~GCM)
+
+
+  
