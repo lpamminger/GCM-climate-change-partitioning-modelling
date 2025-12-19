@@ -333,15 +333,12 @@ write_parquet(
 ### observed = observed rainfall
 ### All results show streamflow without the impact of the partitioning parameter
 ### TODO:
-<<<<<<< HEAD
 ### I have the results - no I must do something with them
 ### Make graphs
 #### - get ensemble median for a given GCM
 #### - get GCM median for a given gauge
 #### - plot streamflow with error bands
-=======
-### Make graphs
->>>>>>> 3825a0bd5f443071637c4acdb6da60253a3c534e
+
 
 testing <- open_dataset(
   source = "./Results/hist_nat_streamflow_data.parquet"
