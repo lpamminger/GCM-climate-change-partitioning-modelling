@@ -104,6 +104,9 @@ prepared_GCM_rainfall <- GCM_rainfall |>
   )
 
 
+## Extract high evidence ratio gauges from data ================================
+data <- data |> 
+  filter(gauge %in% high_evidence_ratio_gauges)
 
 
 ## Modify observed data tibble with GCM information ============================
@@ -173,7 +176,6 @@ GCM_catchment_data_blueprint <- function(GCM, ensemble_id, gauge_ID, data, start
 ### Get unique GCM, ensemble_id and gauge_ID vectors for iteration
 unique_GCMs_ensemble_gauge_combinations <- all_data |>
   select(GCM, ensemble_id, gauge) |>
-  slice_head(n = 4) |> # take first 20 for testing
   # this must have the same gauge order as best_CO2_model_per_gauge
   distinct() |>
   unclass() |>
@@ -182,17 +184,15 @@ unique_GCMs_ensemble_gauge_combinations <- all_data |>
 
 ### Mass catchment_data objects using GCM and observed #########################
 ### This make take some time...7985 combinations -> run in parallel
-### RAM limitations?
 plan(multisession, workers = length(availableWorkers()))
 catchment_data_with_GCM_and_ensemble <- future_pmap(
   .l = unique_GCMs_ensemble_gauge_combinations,
   .f = GCM_catchment_data_blueprint,
-  observed_data = all_data,
+  data = all_data,
   start_stop_indexes = start_stop_indexes,
   .options = furrr_options(seed = 1L),
   .progress = TRUE
 )
-
 
 
 
@@ -201,18 +201,27 @@ catchment_data_with_GCM_and_ensemble <- future_pmap(
 best_CO2_model_with_params_per_gauge <- best_CO2_non_CO2_per_gauge |>
   filter(gauge %in% high_evidence_ratio_gauges) |>
   # remove non-CO2 models
-  filter(contains_CO2) |> 
+  filter(contains_CO2) #|> 
   # this must have the same gauge order as the catchment_data
-  arrange(match(gauge, unique_GCMs_ensemble_gauge_combinations[[3]]))
+  #arrange(match(gauge, unique_GCMs_ensemble_gauge_combinations[[3]]))
 
 
-### match.fun can call a function using the character string of the function name
 best_CO2_model_per_gauge <- best_CO2_model_with_params_per_gauge |>
   select(gauge, streamflow_model) |>
   distinct() 
 
+### Match number of items catchment_data_with_GCM_and_ensemble for pmap
+repeated_best_CO2_per_gauge <- unique_GCMs_ensemble_gauge_combinations |> 
+  `names<-`(c("GCM", "ensemble_id", "gauge")) |> 
+  as_tibble() |> 
+  left_join(
+    best_CO2_model_per_gauge,
+    by = join_by(gauge)
+  )
+
+### match.fun can call a function using the character string of the function name
 extracted_models <- map(
-  .x = best_CO2_model_per_gauge |> pull(streamflow_model),
+  .x = repeated_best_CO2_per_gauge |> pull(streamflow_model),
   .f = match.fun
 )
 
@@ -220,21 +229,33 @@ extracted_models <- map(
 
 
 ## Extract parameter set =======================================================
-extract_params_from_results <- function(gauge, results) {
-  results |>
+extract_params_from_results <- function(GCM, ensemble_id, gauge, results) {
+results |>
+    filter(GCM == {{ GCM }}) |> 
+    filter(ensemble_id == {{ ensemble_id }}) |> 
     filter(gauge == {{ gauge }}) |>
     pull(parameter_value)
 }
+
 
 modified_a3_best_CO2_model_with_params_per_gauge <- best_CO2_model_with_params_per_gauge |>
   mutate(
     parameter_value = if_else(str_detect(parameter, "a3"), 0, parameter_value)
   )
 
-extracted_params <- map(
-  .x = best_CO2_model_per_gauge |> pull(gauge), # this should have the same gauge order as unique_GCMs_ensemble_gauge_combinations[[3]]
+repeated_modified_a3_best_CO2_model_with_params_per_gauge <- unique_GCMs_ensemble_gauge_combinations |> 
+  `names<-`(c("GCM", "ensemble_id", "gauge")) |> 
+  as_tibble() |> 
+  left_join(
+    modified_a3_best_CO2_model_with_params_per_gauge,
+    by = join_by(gauge),
+    relationship = "many-to-many"
+  ) 
+  
+extracted_params <- pmap(
+  .l = unique_GCMs_ensemble_gauge_combinations, # this should have the same gauge order as unique_GCMs_ensemble_gauge_combinations[[3]]
   .f = extract_params_from_results,
-  results = modified_a3_best_CO2_model_with_params_per_gauge
+  results = repeated_modified_a3_best_CO2_model_with_params_per_gauge
 )
 
 
@@ -273,7 +294,14 @@ regenerate_transformed_streamflow <- function(catchment_data, extracted_paramete
 
 ### final result ###############################################################
 regenerated_streamflow_data <- pmap(
-  .l = list(catchment_data, extracted_params, extracted_models),
+  .l = list(catchment_data_with_GCM_and_ensemble, extracted_params, extracted_models),
   .f = regenerate_transformed_streamflow
 ) |>
-  list_rbind()
+  list_rbind() |> 
+  arrange(gauge)
+  
+
+write_parquet(
+  regenerated_streamflow_data,
+  sink = "./Results/hist_nat_streamflow_data.parquet"
+)
