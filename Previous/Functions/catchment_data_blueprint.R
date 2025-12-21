@@ -72,6 +72,20 @@ validate_catchment_data_blueprint <- function(catchment_data_blueprint) {
     )
   }
   
+  # check if start_stop tibbles are empty
+  browser()
+  empty_start_stop <- map_lgl(
+    .x = values$stop_start_data_set,
+    .f = is_empty_tibble
+  ) |> 
+    any()
+  
+  if(empty_start_stop) {
+    stop(
+      "At least one tibble in start_stop_index is empty. Check start stop indices."
+    )
+  }
+  
   # stop return message
   
   # Invisibly return input
