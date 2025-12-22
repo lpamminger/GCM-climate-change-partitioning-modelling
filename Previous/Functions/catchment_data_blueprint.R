@@ -73,7 +73,6 @@ validate_catchment_data_blueprint <- function(catchment_data_blueprint) {
   }
   
   # check if start_stop tibbles are empty
-  browser()
   empty_start_stop <- map_lgl(
     .x = values$stop_start_data_set,
     .f = is_empty_tibble
@@ -119,9 +118,7 @@ catchment_data_blueprint <- function(gauge_ID, observed_data, start_stop_indexes
       validate_catchment_data_blueprint()
   }
   
-  
   ## Option 2 ================================================================== 
-  
   # Split up data based on start and stop indexes
   single_gauge_observed_data <- observed_data |> 
     dplyr::filter(gauge == {{ gauge_ID }})

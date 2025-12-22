@@ -7,11 +7,6 @@ pacman::p_load(tidyverse, truncnorm, sloop, arrow, furrr)
 
 
 
-### THE START STOP INDEXES ARE BROKEN ###
-# I must either preserve the length in data - better more conistent 
-# Dynamically calculate start_stop_indexes
-
-
 # Import functions -------------------------------------------------------------
 source("./Previous/Functions/utility.R")
 source("./Previous/Functions/boxcox_logsinh_transforms.R")
@@ -21,10 +16,6 @@ source("./Previous/Functions/catchment_data_blueprint.R")
 
 
 # Import and prepare data ------------------------------------------------------
-start_stop_indexes <- readr::read_csv(
-  "./Previous/Data/start_end_index.csv",
-  show_col_types = FALSE
-)
 
 data <- readr::read_csv( # data will be in the package
   "./Previous/Data/with_NA_yearly_data_CAMELS.csv",
@@ -85,6 +76,7 @@ high_evidence_ratio_gauges <- best_CO2_non_CO2_per_gauge |>
 
 
 
+
 ## Prepare GCM rainfall data ===================================================
 prepared_GCM_rainfall <- GCM_rainfall |>
   select(!c(historical, hist_nat, smooth_scale_term, realisation)) |>
@@ -98,25 +90,130 @@ prepared_GCM_rainfall <- GCM_rainfall |>
   mutate(
     annual_scaled_hist_nat_rainfall = warm_season + cool_season
   ) |>
-  # Some GCM start on a cool season and miss a hot season. Produces NA - remove
-  drop_na() |>
   mutate(
     # this works as expected
-    standardised_warm_season_to_annual_rainfall_ratio = (warm_season / annual_scaled_hist_nat_rainfall) - mean(warm_season / annual_scaled_hist_nat_rainfall),
+    standardised_warm_season_to_annual_rainfall_ratio = (warm_season / annual_scaled_hist_nat_rainfall) - mean(warm_season / annual_scaled_hist_nat_rainfall, na.rm = T),
     .by = c(GCM, ensemble_id, gauge)
   )
 
 
-## Extract high evidence ratio gauges from data ================================
+
+
+
+## Prepare observed data =======================================================
 data <- data |> 
   filter(gauge %in% high_evidence_ratio_gauges)
+# there needs to be a check here for gauges with ToE> 2014
 
 
-## Modify observed data tibble with GCM information ============================
-### Joining data with prepared_GCM_rainfall
+## Compare observed data to GCM data ===========================================
+observed_start_end_years <- data |> 
+  summarise(
+    obs_start_year = min(year),
+    obs_end_year = max(year),
+    .by = gauge
+  ) 
 
-### Extract just the observed rainfall from data
-observed_rainfall_data <- data |>
+for_filtering_observed_start_end_years <- observed_start_end_years |> 
+  rename(
+    GCM_start_year = obs_start_year,
+    GCM_end_year = obs_end_year
+  ) |> 
+  add_column(
+    GCM = "observed",
+    ensemble_id = "observed",
+    .after = 1
+  )
+
+### Check GCMs start and end dates - compare with observed
+GCM_start_end_years <- prepared_GCM_rainfall |> 
+  summarise(
+    GCM_start_year = min(year),
+    GCM_end_year = max(year),
+    .by = c(gauge, GCM, ensemble_id)
+  )
+
+
+### Combine GCM and observed start and end year
+sort_GCMs <- GCM_start_end_years |> 
+  left_join(
+    observed_start_end_years,
+    by = join_by(gauge)
+  ) |> 
+  # Check 1 - remove GCM that do not have data in the observed period
+  filter(
+    GCM_end_year > obs_start_year
+  ) |> 
+  # Check 2 - GCM start year must be >= 1959 for start stop index
+  filter(
+    GCM_start_year <= 1959
+  ) |> 
+  # Check 3 - GCM end year must be 2014 all entries 
+  filter(
+    GCM_end_year == 2014
+  ) |> 
+  # Check 4 - add observed to GCM and ensemble for filtering later
+  select(!c(obs_start_year, obs_end_year)) |> 
+  rbind(for_filtering_observed_start_end_years) |> 
+  arrange(desc(GCM_start_year))
+
+
+### Results show:
+### - observed starts during 1959 for all entries
+### - GCM ends during 2014 for all entries expect for 1 GCM - cut at 2014
+### - GCMs have missing data - account for this
+### This is problematic using the existing start stop indexes csv as 
+### last entries > 2014 will be references non-existent data
+
+# To ensure start_stop can be used for observed and GCM shorten observed to
+# < 2014 and redo start stop.
+# In future it would be a good idea to have the start stop built into the 
+# catchment_data_set_blueprint
+
+## New data ====================================================================
+short_data <- data |> 
+  filter(year <= 2014)
+
+
+## New start stop ==============================================================
+gauge_continous_start_end <- function(single_gauge, data, min_run_length) {
+  
+  gauge_specific_data <- data |>
+    filter(gauge == {{ single_gauge }})
+  
+  start_end_matrix <- continuous_run_start_end(gauge_specific_data$q_mm) # apply it to every gauge.
+  
+  start_end_matrix |>
+    as_tibble() |>
+    mutate(length = end_index - start_index + 1) |> # + 1 to make the input more easy to understand
+    filter(length > min_run_length - 1) |>  
+    add_column(
+      "gauge" = {{ single_gauge }}, 
+      .before = 1
+      )
+} 
+
+
+start_stop_indexes <- map(
+  .x = data |> pull(gauge) |> unique(), 
+  .f = gauge_continous_start_end,
+  data = short_data,
+  min_run_length = 2L
+) |> 
+  list_rbind()
+
+
+
+
+
+## Join observed and GCM rainfall into single dataset ==========================
+## I can't figure out how to join them so I:
+### 1. extract just observed_rainfall and give it GCM/ensemble of observed
+### 2. rbind() it to the GCM dataset
+### 3. Left join other observed_data to GCM_dataset
+
+### 1. Extract just the observed rainfall from data ############################
+observed_rainfall_data <- short_data |>
   select(year, gauge, p_mm, standardised_warm_season_to_annual_rainfall_ratio) |>
   # rename to match prepared_GCM_rainfall
   rename(
@@ -129,42 +226,72 @@ observed_rainfall_data <- data |>
   )
 
 
-
-### To ensure same length of timeseries everything must have the same length as observed
-### This ensures start_stop_index functions correctly
-min_year <- observed_rainfall_data |> 
-  summarise(
-    min_year = min(year),
-    .by = gauge
-  ) |> 
-  pull(min_year) |> 
-  unique()
-# All gauges have a start 1959
+### 2. rbind() it to the GCM dataset ###########################################
+observed_and_GCM_rainfall <- prepared_GCM_rainfall |> 
+  select(!c(warm_season, cool_season)) |> 
+  rbind(observed_rainfall_data)
 
 
-### rbind
-observed_other_data <- data |>
+### 3. Left join other observed_data to GCM_dataset ############################
+observed_other_data <- short_data |>
   select(!c(p_mm, standardised_warm_season_to_annual_rainfall_ratio))
 
-
-### add back the information to create catchment_data object using catchment_data_blueprint
-all_data <- prepared_GCM_rainfall |>
-  select(!c(warm_season, cool_season)) |>
-  rbind(observed_rainfall_data) |>
+all_data <- observed_and_GCM_rainfall |>
   left_join(
     observed_other_data,
     by = join_by(gauge, year)
-  ) |>
+  ) 
+
+
+## Clean up all-data using previous findings ===================================
+clean_all_data <- all_data |> 
   # rename to work with catchment_data_blueprint
   rename(
     p_mm = annual_scaled_hist_nat_rainfall
-  ) |>
-  # make year an integer to make catchment_data_blueprint happy
-  mutate(
-    year = as.integer(year)
   ) |> 
-  # set min year to ensure start_stop_index works correctly
-  filter(year >= min_year)
+  # convert year to integer for catchment_data_blueprint
+  mutate(year = as.integer(year)) |>  
+  # Filter out GCM without data in observed period
+  semi_join(
+    sort_GCMs,
+    by = join_by(gauge, GCM, ensemble_id)
+  ) |> 
+  # Minimum year for start-stop index
+  filter(year >= 1959) |> 
+  arrange(year, gauge, GCM, ensemble_id)
+
+
+### Final check - make sure GCM data is the same length as observed ############
+obs_count <- clean_all_data |> 
+  filter(GCM == "observed") |> 
+  summarise(
+    obs_count = n(),
+    .by = gauge
+  )
+
+GCM_ensemble_count <- clean_all_data |> 
+  filter(GCM != "observed") |> 
+  summarise(
+    count = n(),
+    .by = c(GCM, ensemble_id, gauge)
+  ) |> 
+  left_join(
+    obs_count,
+    by = join_by(gauge)
+  ) |> 
+  mutate(
+    check = count == obs_count
+  ) |> 
+  filter(!check)
+
+# Cases when this occurs:
+## - mismatch of data between hist and hist nat
+clean_all_data <- clean_all_data |> 
+  anti_join(
+    GCM_ensemble_count,
+    by = join_by(GCM, ensemble_id, gauge)
+  )
+
 
 
 
@@ -191,13 +318,15 @@ GCM_catchment_data_blueprint <- function(GCM, ensemble_id, gauge_ID, data, start
   return(catchment_data_result)
 }
 
+
 ### Get unique GCM, ensemble_id and gauge_ID vectors for iteration
-unique_GCMs_ensemble_gauge_combinations <- all_data |>
+unique_GCMs_ensemble_gauge_combinations <- clean_all_data |>
   select(GCM, ensemble_id, gauge) |>
   # this must have the same gauge order as best_CO2_model_per_gauge
   distinct() |>
   unclass() |>
   unname()
+
 
 
 
@@ -207,15 +336,15 @@ plan(multisession, workers = length(availableWorkers()))
 catchment_data_with_GCM_and_ensemble <- future_pmap(
   .l = unique_GCMs_ensemble_gauge_combinations,
   .f = GCM_catchment_data_blueprint,
-  data = all_data,
+  data = clean_all_data,
   start_stop_indexes = start_stop_indexes,
   .options = furrr_options(seed = 1L),
   .progress = TRUE
 )
 
 
-
 ## Extract streamflow function from best_CO2_model_gauge =======================
+
 ### Filtered gauge, model and parameters #######################################
 best_CO2_model_with_params_per_gauge <- best_CO2_non_CO2_per_gauge |>
   filter(gauge %in% high_evidence_ratio_gauges) |>
@@ -327,30 +456,6 @@ write_parquet(
 
 
 
-### Testing
-
-### The GCM produce different rainfalls
-### observed = observed rainfall
-### All results show streamflow without the impact of the partitioning parameter
-### TODO:
-### I have the results - no I must do something with them
-### Make graphs
-#### - get ensemble median for a given GCM
-#### - get GCM median for a given gauge
-#### - plot streamflow with error bands
-
-
-testing <- open_dataset(
-  source = "./Results/hist_nat_streamflow_data.parquet"
-) |> 
-  collect()
-
-testing |> 
-  filter(gauge == "A2390523") |> 
-  ggplot(aes(x = year, y = realspace_streamflow, colour = ensemble_id)) +
-  geom_line(show.legend = FALSE) +
-  theme_bw() +
-  facet_wrap(~GCM)
 
 
   
