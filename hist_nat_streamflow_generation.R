@@ -299,11 +299,13 @@ GCM_ensemble_count <- clean_all_data |>
 
 ## manually remove these entires in the observed
 manual_removal_obs <- tribble(
-  ~year, ~GCM,       ~gauge,
-  1961,  "observed", "216002",
-  1963,  "observed", "216002",
-  1978,  "observed", "235205",
-  1981,  "observed", "415223"
+  ~year,  ~gauge,
+  1961, "216002",
+  1963, "216002",
+  1978, "235205",
+  1963, "227213",
+  1981, "415223",
+  1986, "415223"
 )
 
 
@@ -316,12 +318,21 @@ clean_all_data <- clean_all_data |>
   ) |> 
   anti_join(
     manual_removal_obs,
-    by = join_by(year, GCM, gauge)
+    by = join_by(year, gauge)
   )
 
+# manually changing value requires an update to start stop index
+update_start_stop_data <- clean_all_data |> 
+  filter(GCM == "observed") 
 
 
-
+updated_start_stop_indexes <- map(
+  .x = update_start_stop_data |> pull(gauge) |> unique(), 
+  .f = gauge_continous_start_end,
+  data = update_start_stop_data,
+  min_run_length = 2L
+) |> 
+  list_rbind()
 
 
 ## Build catchment_data_set objects ============================================
@@ -356,7 +367,13 @@ unique_GCMs_ensemble_gauge_combinations <- clean_all_data |>
   unclass() |>
   unname()
 
-
+#x <- GCM_catchment_data_blueprint(
+#  GCM = "ACCESS-CM2",
+#  ensemble_id = "r1i1p1f1",
+#  gauge_ID = "415223",
+#  data = clean_all_data,
+#  start_stop_indexes = updated_start_stop_indexes
+#)$stop_start_data_set$start_index
 
 
 ### Mass catchment_data objects using GCM and observed #########################
@@ -366,7 +383,7 @@ catchment_data_with_GCM_and_ensemble <- future_pmap(
   .l = unique_GCMs_ensemble_gauge_combinations,
   .f = GCM_catchment_data_blueprint,
   data = clean_all_data,
-  start_stop_indexes = start_stop_indexes,
+  start_stop_indexes = updated_start_stop_indexes,
   .options = furrr_options(seed = 1L),
   .progress = TRUE
 )
@@ -442,6 +459,11 @@ extracted_params <- pmap(
 
 ## Regenerate streamflow (log-sinh space) ======================================
 regenerate_transformed_streamflow <- function(catchment_data, extracted_parameters, extracted_model) {
+  
+  # makeshift breakpoint for misbehaving catchments
+  #if(catchment_data$gauge == "415223") {#415223, 235205, 227213
+  #  browser() 
+  #}
   
   results <- extracted_model(
     catchment_data = catchment_data,
