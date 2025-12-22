@@ -62,8 +62,9 @@ GCM_precip <- open_dataset(
     hist_nat = `hist-nat`
   ) |>
   # remove gauges not interested in
-  filter(gauge %in% select_gauges)
-
+  filter(gauge %in% select_gauges) |> 
+  collect() #|> 
+  #arrange(year)
 
 
 
@@ -107,25 +108,12 @@ seasonal_precip_obs <- CAMELS_precip |>
 
 # Calculate scale_term ---------------------------------------------------------
 all_precipitation_data <- GCM_precip |>
-  collect() |>
   # remove GCMs without a hist and hist-nat equivalent - must be `collected` to do this
   drop_na() |>
   mutate(
     naive_scale_term = hist_nat / historical
   )
 
-
-## Get GCM meta information ====================================================
-GCM_meta_info <- all_precipitation_data |>
-  select(GCM, ensemble_id, realisation) |>
-  distinct() |>
-  arrange(GCM)
-
-GCM_meta_info |>
-  summarise(
-    n = n(),
-    .by = c(GCM)
-  )
 
 
 ## Plot naive scaling term =====================================================
@@ -276,11 +264,14 @@ walk(
 
 
 
+
 # Double check the scaling term for each GCM and ensemble combination ----------
 # Based of the sensitivity graphs n = 10 looks good
 smooth_scale_term <- all_precipitation_data |>
+  # order of years matter when smoothing
+  arrange(gauge, GCM, ensemble_id, year) |> 
   mutate(
-    smooth_scale_term = rollapply(naive_scale_term, n = 10, f = mean),
+    smooth_scale_term = rollapply(naive_scale_term, n = 5, f = mean),
     .by = c(GCM, ensemble_id, realisation, gauge)
   ) |>
   left_join(
@@ -292,6 +283,14 @@ smooth_scale_term <- all_precipitation_data |>
   mutate(
     smooth_hist_nat = smooth_scale_term * season_obs_precipitation
   )
+
+
+# some years removed after smoothing
+#x <- smooth_scale_term |> 
+#  filter(GCM == "BCC-CSM2-MR") |> 
+#  filter(ensemble_id == "r1i1p1f1") |> 
+#  filter(gauge == "224213") |> 
+#  arrange(year)
 
 # Quick numbers check
 smooth_scale_term |>
