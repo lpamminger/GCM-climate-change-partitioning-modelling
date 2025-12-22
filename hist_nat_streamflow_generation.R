@@ -282,7 +282,30 @@ GCM_ensemble_count <- clean_all_data |>
   mutate(
     check = count == obs_count
   ) |> 
-  filter(!check)
+  filter(!check) |> 
+  # this is to exlude those catchment with lots of missing data
+  filter(count < 50)
+
+# observed data mismatch for gauge (missing obs year - not sure why) 
+## - 216002 (1961, 1963), 
+## - 227213 (1963), 
+## - 235205 (1978), 
+## - 415223 (1981) 
+
+#clean_all_data |> 
+#  filter(GCM == "observed") |> 
+#  filter(gauge == "415223") |> 
+#  pull(year)
+
+## manually remove these entires in the observed
+manual_removal_obs <- tribble(
+  ~year, ~GCM,       ~gauge,
+  1961,  "observed", "216002",
+  1963,  "observed", "216002",
+  1978,  "observed", "235205",
+  1981,  "observed", "415223"
+)
+
 
 # Cases when this occurs:
 ## - mismatch of data between hist and hist nat
@@ -290,7 +313,13 @@ clean_all_data <- clean_all_data |>
   anti_join(
     GCM_ensemble_count,
     by = join_by(GCM, ensemble_id, gauge)
+  ) |> 
+  anti_join(
+    manual_removal_obs,
+    by = join_by(year, GCM, gauge)
   )
+
+
 
 
 
