@@ -13,7 +13,8 @@ hist_nat_streamflow_data <- open_dataset(
 ) |> 
   collect()
 
-## Streamflow using observed precipitation with CO2 turned on
+### Gauges with a ToE > 2014 remove
+### Streamflow using observed precipitation with CO2 turned on
 ### streamflow_cmaes.csv import here
 
 

@@ -267,11 +267,14 @@ walk(
 
 # Double check the scaling term for each GCM and ensemble combination ----------
 # Based of the sensitivity graphs n = 10 looks good
+
+selected_window_years <- 2.5
+
 smooth_scale_term <- all_precipitation_data |>
   # order of years matter when smoothing
   arrange(gauge, GCM, ensemble_id, year) |> 
   mutate(
-    smooth_scale_term = rollapply(naive_scale_term, n = 5, f = mean),
+    smooth_scale_term = rollapply(naive_scale_term, n = selected_window_years*2, f = mean),
     .by = c(GCM, ensemble_id, realisation, gauge)
   ) |>
   left_join(
@@ -317,7 +320,7 @@ ecdf_scaled_term_plot <- tibble(
     x = "Scaling Term",
     y = "F(Scaling Term)",
     title = "Empirical CDF of hist-nat scaling term",
-    subtitle = "Moving window of 5 years"
+    subtitle = paste0("Moving window of ", selected_window_years*2, " years")
   ) +
   theme(
     plot.title = element_text(hjust = 0.5),
@@ -325,7 +328,7 @@ ecdf_scaled_term_plot <- tibble(
   )
 
 ggsave(
-  file = "ecdf_window_5_scale_term.pdf",
+  file = paste0("ecdf_window_", selected_window_years*2, "_scale_term.pdf"),
   path = "./Figures/scaling_rainfall",
   plot = ecdf_scaled_term_plot,
   device = "pdf",
