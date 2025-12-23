@@ -129,6 +129,7 @@ naive_scale_term <- all_precipitation_data |>
   summarise(
     median_GCM_naive_scale_term = median(median_naive_scale_term),
     max_GCM_naive_scale_term = max(max_naive_scale_term),
+    p90_GCM_naive_scale_term = quantile(median_naive_scale_term, probs = 0.9),
     .by = c(gauge, year, season)
   ) |>
   left_join(
@@ -141,7 +142,7 @@ naive_scale_term <- all_precipitation_data |>
 
 # Quick numerical check
 naive_scale_term |>
-  select(median_GCM_naive_scale_term, max_GCM_naive_scale_term) |>
+  select(median_GCM_naive_scale_term, max_GCM_naive_scale_term, p90_GCM_naive_scale_term) |>
   summary()
 
 # I will be applying the median in the models focus on that
@@ -151,7 +152,8 @@ naive_scale_term |>
 naive_scale_term_plot <- naive_scale_term |>
   # scale obs
   mutate(
-    median_naive_scaled_hist_nat = median_GCM_naive_scale_term * season_obs_precipitation
+    median_naive_scaled_hist_nat = median_GCM_naive_scale_term * season_obs_precipitation,
+    max_naive_scaled_hist_nat = max_GCM_naive_scale_term * season_obs_precipitation
   ) |>
   group_by(
     gauge
@@ -159,7 +161,7 @@ naive_scale_term_plot <- naive_scale_term |>
   mutate(index = row_number()) |>
   ungroup() |>
   pivot_longer(
-    cols = c(median_naive_scaled_hist_nat, season_obs_precipitation),
+    cols = c(max_naive_scaled_hist_nat, season_obs_precipitation),
     names_to = "obs_vs_scaled",
     values_to = "seasonal_precipitation_mm"
   ) |>
@@ -170,7 +172,7 @@ naive_scale_term_plot <- naive_scale_term |>
 
 
 ggsave(
-  file = "naive_median_GCM_scaled_hist_nat_timeseries.pdf",
+  file = "naive_max_GCM_scaled_hist_nat_timeseries.pdf",
   path = "./Figures/scaling_rainfall",
   plot = naive_scale_term_plot,
   device = "pdf",
@@ -268,7 +270,7 @@ walk(
 # Double check the scaling term for each GCM and ensemble combination ----------
 # Based of the sensitivity graphs n = 10 looks good
 
-selected_window_years <- 2.5
+selected_window_years <- 5
 
 smooth_scale_term <- all_precipitation_data |>
   # order of years matter when smoothing
@@ -301,6 +303,9 @@ smooth_scale_term |>
   geom_histogram() +
   theme_bw()
 
+x <- smooth_scale_term |> pull(smooth_scale_term)
+(sum(x > 2) / nrow(smooth_scale_term)) * 100
+
 ecdf_smooth_scale_function <- smooth_scale_term |>
   pull(smooth_scale_term) |>
   ecdf()
@@ -320,7 +325,7 @@ ecdf_scaled_term_plot <- tibble(
     x = "Scaling Term",
     y = "F(Scaling Term)",
     title = "Empirical CDF of hist-nat scaling term",
-    subtitle = paste0("Moving window of ", selected_window_years*2, " years")
+    subtitle = paste0("Moving window of ", selected_window_years, " years")
   ) +
   theme(
     plot.title = element_text(hjust = 0.5),
@@ -328,7 +333,7 @@ ecdf_scaled_term_plot <- tibble(
   )
 
 ggsave(
-  file = paste0("ecdf_window_", selected_window_years*2, "_scale_term.pdf"),
+  file = paste0("ecdf_window_", selected_window_years, "_scale_term.pdf"),
   path = "./Figures/scaling_rainfall",
   plot = ecdf_scaled_term_plot,
   device = "pdf",
