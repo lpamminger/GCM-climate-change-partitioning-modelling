@@ -115,7 +115,7 @@ plot <- all_plotting_data |>
   ggplot(aes(x = year, y = median_GCM_realspace_streamflow, colour = type, fill = type)) +
   geom_ribbon(
     aes(x = year, ymin = min_GCM_realspace_streamflow, ymax = max_GCM_realspace_streamflow),
-    alpha = 0.1,
+    alpha = 0.2,
     inherit.aes = FALSE,
     data = hist_nat_plotting_data,
     fill = "#7570b3"
