@@ -4,6 +4,7 @@
 # Import libraries -------------------------------------------------------------
 pacman::p_load(tidyverse, truncnorm, sloop, arrow, furrr, ozmaps, sf, ggmagnify, ggplot2, patchwork)
 
+
 # Import functions -------------------------------------------------------------
 source("Previous/Functions/utility.R")
 
@@ -155,6 +156,10 @@ ggsave(
 
 ## Ignore rainfall uncertainty for now - can I just use min/max for the uncertainty?
 ## The pivot wider angle with uncertainty will be complex
+## Approach:
+## - get `counterfactual hist nat precipitation` streamflow for all GCMs
+## - find the relative impact of of `counterfactual hist nat precipitation` on streamflow for all GCMs
+## - use the range or IQR of the range of values of the relative impact
 
 
 ## Decompose each impact at each timestep ======================================
@@ -163,7 +168,7 @@ ggsave(
 ## Rainfall effect = `Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`
 ## Partitioning effect = `Counterfactual - Observed Precipitation` - `CO2 Model - Observed Precipitation` 
 
-decomposing_imapcts <- all_plotting_data |> 
+decomposing_impacts <- all_plotting_data |> 
   select(!c(max_GCM_realspace_streamflow, min_GCM_realspace_streamflow)) |> 
   pivot_wider(
     id_cols = c(year, gauge),
@@ -189,7 +194,7 @@ decomposing_imapcts <- all_plotting_data |>
 decade_1 <- seq(from = 1990, to = 1999)
 decade_2 <- seq(from = 2012, to = 2021)
 
-decade_specific_decomposed_impacts <- decomposing_imapcts |> 
+decade_specific_decomposed_impacts <- decomposing_impacts |> 
   filter(year %in% c(decade_1, decade_2)) |> 
   # add decade column
   mutate(
@@ -212,10 +217,10 @@ decade_specific_decomposed_impacts <- decomposing_imapcts |>
     rainfall_effect = abs(sum_counterfactual_hist_nat -  sum_counterfactual_obs),
     partitioning_effect = abs(sum_counterfactual_obs - sum_CO2_obs) 
   ) |> 
-  # relative impact to total
+  # relative impact to total - need if else when CO2 adds streamflow
   mutate(
-    relative_rainfall_effect = rainfall_effect / total_effect,
-    relative_partitioning_effect = partitioning_effect / total_effect
+    relative_rainfall_effect = if_else(total_effect > rainfall_effect, rainfall_effect / total_effect, total_effect / rainfall_effect) ,
+    relative_partitioning_effect = if_else(total_effect > partitioning_effect, partitioning_effect / total_effect, total_effect / partitioning_effect) 
   ) |>  # join lat lon and state data
   left_join(
     lat_lon_data,
@@ -275,6 +280,7 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
     scale_fill_distiller(
       palette = colour_palette,
       limits = scale_limits,
+      direction = 2
     ) +
     theme_void()
   
@@ -294,6 +300,7 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
     scale_fill_distiller(
       palette = colour_palette,
       limits = scale_limits,
+      direction = 2
     ) +
     theme_void()
   
@@ -315,6 +322,7 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
     scale_fill_distiller(
       palette = colour_palette,
       limits = scale_limits,
+      direction = 2
     ) +
     theme_void()
   
@@ -334,6 +342,7 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
     scale_fill_distiller(
       palette = colour_palette,
       limits = scale_limits,
+      direction = 2
     ) +
     theme_void()
   
@@ -355,6 +364,7 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
     scale_fill_distiller(
       palette = colour_palette,
       limits = scale_limits,
+      direction = 2
     ) +
     theme_void()
   
@@ -374,6 +384,7 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
     scale_fill_distiller(
       palette = colour_palette,
       limits = scale_limits,
+      direction = 2
     ) +
     theme_bw() +
     # expand map
@@ -466,8 +477,8 @@ rainfall_impact_1990 <- map_plot(
   plotting_variable = relative_rainfall_effect,
   data =  decade_specific_decomposed_impacts |> filter(decade == 1),
   scale_limits = c(0, 1), 
-  colour_palette = "OrRd",
-  legend_title = "test"#bquote("abs("*Delta*"Q [mm/y] / "*Delta*"APET [mm/y])")
+  colour_palette = "RdYlBu",
+  legend_title = "Relative effect of climate change on streamflow only rainfall (rainfall_effect / total_effect)" 
 ) +
   geom_text(
     data = figure_label_1990,
@@ -499,8 +510,8 @@ rainfall_impact_2012 <- map_plot(
   plotting_variable = relative_rainfall_effect,
   data =  decade_specific_decomposed_impacts |> filter(decade == 2),
   scale_limits = c(0, 1), 
-  colour_palette = "OrRd",
-  legend_title = "test"#bquote("abs("*Delta*"Q [mm/y] / "*Delta*"APET [mm/y])")
+  colour_palette = "RdYlBu",
+  legend_title = "Relative effect of climate change on streamflow only rainfall (rainfall_effect / total_effect)"
 ) +
   geom_text(
     data = figure_label_2012,
@@ -521,3 +532,22 @@ final_plot_rainfall_effect_plot <- (rainfall_impact_1990 | rainfall_impact_2012)
   plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
 
+ggsave(
+  file = "CO2_relative_impact_of_rainfall_on_streamflow.pdf",
+  path = "./Figures",
+  plot = final_plot_rainfall_effect_plot,
+  device = "pdf",
+  width = 297,
+  height = 210,
+  units = "mm"
+)
+
+
+
+# 
+decomposing_impacts |> 
+  filter(gauge == "405274") |> 
+  ggplot(aes(x = `Counterfactual - Hist Nat Precipitation`, y = `CO2 Model - Observed Precipitation`)) +
+  geom_point() +
+  geom_abline(slope = 1) +
+  theme_bw()
