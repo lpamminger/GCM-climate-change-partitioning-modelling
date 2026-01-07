@@ -14,7 +14,7 @@ source("Previous/Functions/utility.R")
 lat_lon_data <- read_csv(
   "Previous/Data/gauge_information_CAMELS.csv",
   show_col_types = FALSE
-  ) |> 
+) |>
   select(gauge, lat, lon, state)
 
 ## hist nat streamflow =========================================================
@@ -154,7 +154,6 @@ ggsave(
 
 # Decompose of rainfall and CO2 partitioning on streamflow ---------------------
 
-## Ignore rainfall uncertainty for now - can I just use min/max for the uncertainty?
 ## The pivot wider angle with uncertainty will be complex
 ## Approach:
 ## - get `counterfactual hist nat precipitation` streamflow for all GCMs
@@ -162,31 +161,33 @@ ggsave(
 ## - use the range or IQR of the range of values of the relative impact
 
 
+
+
 ## Decompose each impact at each timestep ======================================
 
-## Total effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`  
+## Total effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`
 ## Rainfall effect = `Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`
-## Partitioning effect = `Counterfactual - Observed Precipitation` - `CO2 Model - Observed Precipitation` 
+## Partitioning effect = `Counterfactual - Observed Precipitation` - `CO2 Model - Observed Precipitation`
 
-decomposing_impacts <- all_plotting_data |> 
-  select(!c(max_GCM_realspace_streamflow, min_GCM_realspace_streamflow)) |> 
+decomposing_impacts <- all_plotting_data |>
+  select(!c(max_GCM_realspace_streamflow, min_GCM_realspace_streamflow)) |>
   pivot_wider(
     id_cols = c(year, gauge),
     names_from = type,
     values_from = median_GCM_realspace_streamflow
   ) |>
-  drop_na() 
-  # decompose using formula above
-  #mutate(
-  #  total_effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`,
-  #  rainfall_effect = `Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`,
-  #  partitioning_effect = `Counterfactual - Observed Precipitation` - `CO2 Model - Observed Precipitation` 
-  #) |> 
-  # find relative impact
-  #mutate(
-  #  relative_rainfall_effect = rainfall_effect / total_effect,
-  #  relative_partitioning_effect = partitioning_effect / total_effect
-  #)
+  drop_na()
+# decompose using formula above
+# mutate(
+#  total_effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`,
+#  rainfall_effect = `Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`,
+#  partitioning_effect = `Counterfactual - Observed Precipitation` - `CO2 Model - Observed Precipitation`
+# ) |>
+# find relative impact
+# mutate(
+#  relative_rainfall_effect = rainfall_effect / total_effect,
+#  relative_partitioning_effect = partitioning_effect / total_effect
+# )
 
 
 ## Aggregate impacts on two specific decades ===================================
@@ -194,8 +195,8 @@ decomposing_impacts <- all_plotting_data |>
 decade_1 <- seq(from = 1990, to = 1999)
 decade_2 <- seq(from = 2012, to = 2021)
 
-decade_specific_decomposed_impacts <- decomposing_impacts |> 
-  filter(year %in% c(decade_1, decade_2)) |> 
+decade_specific_decomposed_impacts <- decomposing_impacts |>
+  filter(year %in% c(decade_1, decade_2)) |>
   # add decade column
   mutate(
     decade = case_when(
@@ -203,66 +204,118 @@ decade_specific_decomposed_impacts <- decomposing_impacts |>
       year %in% decade_2 ~ 2,
       .default = NA
     )
-  ) |> 
+  ) |>
   # aggregate by decade
   summarise(
     sum_counterfactual_hist_nat = sum(`Counterfactual - Hist Nat Precipitation`),
     sum_counterfactual_obs = sum(`Counterfactual - Observed Precipitation`),
     sum_CO2_obs = sum(`CO2 Model - Observed Precipitation`),
     .by = c(gauge, decade)
-  ) |> 
+  ) |>
   # decompose - take abs two catchments CO2 increases streamflow
   mutate(
     total_effect = abs(sum_counterfactual_hist_nat - sum_CO2_obs),
-    rainfall_effect = abs(sum_counterfactual_hist_nat -  sum_counterfactual_obs),
-    partitioning_effect = abs(sum_counterfactual_obs - sum_CO2_obs) 
-  ) |> 
+    rainfall_effect = abs(sum_counterfactual_hist_nat - sum_counterfactual_obs),
+    partitioning_effect = abs(sum_counterfactual_obs - sum_CO2_obs)
+  ) |>
   # relative impact to total - need if else when CO2 adds streamflow
   mutate(
-    relative_rainfall_effect = if_else(total_effect > rainfall_effect, rainfall_effect / total_effect, total_effect / rainfall_effect) ,
-    relative_partitioning_effect = if_else(total_effect > partitioning_effect, partitioning_effect / total_effect, total_effect / partitioning_effect) 
-  ) |>  # join lat lon and state data
+    relative_rainfall_effect = if_else(total_effect > rainfall_effect, rainfall_effect / total_effect, total_effect / rainfall_effect),
+    relative_partitioning_effect = if_else(total_effect > partitioning_effect, partitioning_effect / total_effect, total_effect / partitioning_effect)
+  ) |> # join lat lon and state data
   left_join(
     lat_lon_data,
     by = join_by(gauge)
   )
 
 
+## Adding uncertainty ==========================================================
+# 1. This is all the GCM streamflow results - This is needed for total and rainfall calculations
+GCM_streamflow_data <- hist_nat_streamflow_data |>
+  filter(GCM != "observed") |>
+  # Ensemble median per GCM
+  summarise(
+    median_ensemble_realspace_streamflow = median(realspace_streamflow),
+    .by = c(year, GCM, gauge)
+  ) |>
+  add_column(
+    type = "Counterfactual - Hist Nat Precipitation"
+  ) |> # 2. Aggregate into decade form
+  filter(year %in% c(decade_1, decade_2)) |>
+  # add decade column
+  mutate(
+    decade = case_when(
+      year %in% decade_1 ~ 1,
+      year %in% decade_2 ~ 2,
+      .default = NA
+    )
+  ) |>
+  summarise(
+    sum_counterfactual_hist_nat = sum(median_ensemble_realspace_streamflow),
+    .by = c(decade, gauge, GCM)
+  )
+
+# 3. Total effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`
+## join decade specific decomposed impacts
+uncertainty_decade_specific_decomposed_impacts <- decade_specific_decomposed_impacts |>
+  select(gauge, decade, sum_counterfactual_obs, sum_CO2_obs) |>
+  right_join(
+    GCM_streamflow_data,
+    by = join_by(decade, gauge)
+  ) |>
+  mutate(
+    total_effect = abs(sum_counterfactual_hist_nat - sum_CO2_obs),
+    partitioning_effect = abs(sum_counterfactual_obs - sum_CO2_obs)
+  ) |> # get relative effect for partitioning only to avoid double up of uncertaities
+  mutate(
+    relative_partitioning_effect = if_else(total_effect > partitioning_effect, partitioning_effect / total_effect, total_effect / partitioning_effect),
+    # assume relative_rainfall_effect is complementary
+    relative_rainfall_effect = 1 - relative_partitioning_effect
+  ) |> # get uncertainty of relative rainfall_effect
+  summarise(
+    range_relative_rainfall_effect = IQR(relative_partitioning_effect),#max(range(relative_rainfall_effect)) - min(range(relative_rainfall_effect)),
+    .by = c(gauge, decade)
+  ) |> # 4. join uncertainty values to existing values
+  right_join(
+    decade_specific_decomposed_impacts,
+    by = join_by(gauge, decade)
+  ) |>  # arrange by uncertainty for best plotting
+  arrange(desc(range_relative_rainfall_effect))
+
 ## Stick results in a map (decade comparison side-by-side) =====================
 
 # Map plotting function --------------------------------------------------------
-map_plot <- function(plotting_variable, data, scale_limits, colour_palette, legend_title) {
-
-  
+map_plot <- function(plotting_variable, size_variable, data, scale_limits, uncertainty_limits, uncertainty_breaks, colour_palette, legend_title) {
   data <- data |>
     rename(
-      plotting_variable = {{ plotting_variable }}
+      plotting_variable = {{ plotting_variable }},
+      size_variable = {{ size_variable }}
     )
-  
-  
+
+
   ## Make map template using ozmaps ============================================
   aus_map <- generate_aus_map_sf()
-  
+
   ## Get inset data ============================================================
   ### Filter data by state #####################################################
   QLD_data <- data |>
     filter(state == "QLD")
-  
+
   NSW_data <- data |>
     filter(state == "NSW")
-  
+
   VIC_data <- data |>
     filter(state == "VIC")
-  
+
   WA_data <- data |>
     filter(state == "WA")
-  
+
   TAS_data <- data |>
     filter(state == "TAS")
-  
-  
-  
-  
+
+
+
+
   ## Generate inset plots ======================================================
   inset_plot_QLD <- aus_map |>
     filter(state == "QLD") |>
@@ -270,9 +323,8 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
     geom_sf() +
     geom_point(
       data = QLD_data,
-      aes(x = lon, y = lat, fill = plotting_variable),
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
       show.legend = FALSE,
-      size = 2.5,
       stroke = 0.1,
       colour = "black",
       shape = 21
@@ -282,17 +334,22 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
       limits = scale_limits,
       direction = 2
     ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
+
   inset_plot_NSW <- aus_map |>
     filter(state == "NSW") |>
     ggplot() +
     geom_sf() +
     geom_point(
       data = NSW_data,
-      aes(x = lon, y = lat, fill = plotting_variable),
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
       show.legend = FALSE,
-      size = 2.5,
       stroke = 0.1,
       colour = "black",
       shape = 21
@@ -302,39 +359,48 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
       limits = scale_limits,
       direction = 2
     ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
-  
+
+
   inset_plot_VIC <- aus_map |>
     filter(state == "VIC") |>
     ggplot() +
     geom_sf() +
     geom_point(
       data = VIC_data,
-      aes(x = lon, y = lat, fill = plotting_variable),
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
       show.legend = FALSE,
-      size = 2.5,
       stroke = 0.1,
       colour = "black",
       shape = 21
     ) +
-    # https://stackoverflow.com/questions/65947347/r-how-to-manually-set-binned-colour-scale-in-ggplot
     scale_fill_distiller(
       palette = colour_palette,
       limits = scale_limits,
       direction = 2
     ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
+
   inset_plot_WA <- aus_map |>
     filter(state == "WA") |>
     ggplot() +
     geom_sf() +
     geom_point(
       data = WA_data,
-      aes(x = lon, y = lat, fill = plotting_variable),
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
       show.legend = FALSE,
-      size = 2.5,
       stroke = 0.1,
       colour = "black",
       shape = 21
@@ -344,19 +410,24 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
       limits = scale_limits,
       direction = 2
     ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
-  
-  
+
+
+
   inset_plot_TAS <- aus_map |>
     filter(state == "TAS") |>
     ggplot() +
     geom_sf() +
     geom_point(
       data = TAS_data,
-      aes(x = lon, y = lat, fill = plotting_variable),
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
       show.legend = FALSE,
-      size = 2.5,
       stroke = 0.1,
       colour = "black",
       shape = 21
@@ -366,17 +437,22 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
       limits = scale_limits,
       direction = 2
     ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
-  
+
+
   ## The big map ===============================================================
   aus_map |>
     ggplot() +
     geom_sf() +
     geom_point(
       data = data,
-      aes(x = lon, y = lat, fill = plotting_variable),
-      size = 2.5,
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
       stroke = 0.1,
       colour = "black",
       shape = 21
@@ -386,6 +462,12 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
       limits = scale_limits,
       direction = 2
     ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
     theme_bw() +
     # expand map
     coord_sf(xlim = c(95, 176), ylim = c(-60, 0)) +
@@ -437,7 +519,8 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
     labs(
       x = NULL, # "Latitude",
       y = NULL, # "Longitude",
-      fill = legend_title
+      fill = legend_title,
+      size = "IQR from GCM Uncertainty"
     ) +
     theme(
       legend.title = element_text(hjust = 0.5),
@@ -447,20 +530,35 @@ map_plot <- function(plotting_variable, data, scale_limits, colour_palette, lege
       legend.position = "inside",
       legend.position.inside = c(0.346, 0.9), # constants used to move the legend in the right place
       legend.box = "horizontal", # side-by-side legends
-      #panel.border = element_blank(),
+      # panel.border = element_blank(),
       panel.grid = element_blank(),
       axis.ticks = element_blank(),
+      #legend.key.width = unit(1, "null"), this looks nice but I can't get it to work https://tidyverse.org/blog/2024/02/ggplot2-3-5-0-legends/
       legend.margin = margin(t = 5, b = 5, r = 20, l = 20, unit = "pt") # add extra padding around legend box to avoid -1.6 intersecting with line
     ) +
     guides(
       fill = guide_colourbar(
         direction = "horizontal",
         barwidth = unit(12, "cm")
+      ),
+      size = guide_bins(
+        show.limits = TRUE,
+        direction = "horizontal",
+        keywidth = 2
       )
     )
 }
 
 
+## Calculate limits and breaks for uncertainty =================================
+uncertainty_decade_specific_decomposed_impacts |>
+  pull(range_relative_rainfall_effect) |>
+  range()
+
+
+# hard-code limits and range
+uncertainty_dot_limits <- c(0, 0.34)
+uncertainty_dot_breaks <- c(0.05, 0.10, 0.15, 0.20, 0.25, 0.3)
 
 ## Plot 1990-1999 ==============================================================
 figure_label_1990 <- tribble(
@@ -475,10 +573,13 @@ decade_label_1990 <- tribble(
 
 rainfall_impact_1990 <- map_plot(
   plotting_variable = relative_rainfall_effect,
-  data =  decade_specific_decomposed_impacts |> filter(decade == 1),
-  scale_limits = c(0, 1), 
+  size_variable = range_relative_rainfall_effect,
+  data = uncertainty_decade_specific_decomposed_impacts |> filter(decade == 1),
+  scale_limits = c(0, 1),
+  uncertainty_limits = uncertainty_dot_limits,
+  uncertainty_breaks = uncertainty_dot_breaks,
   colour_palette = "RdYlBu",
-  legend_title = "Relative effect of climate change on streamflow only rainfall (rainfall_effect / total_effect)" 
+  legend_title = "GCM Median Relative Impact of Rainfall (rainfall_effect / total_effect)"
 ) +
   geom_text(
     data = figure_label_1990,
@@ -508,10 +609,13 @@ decade_label_2012 <- tribble(
 
 rainfall_impact_2012 <- map_plot(
   plotting_variable = relative_rainfall_effect,
-  data =  decade_specific_decomposed_impacts |> filter(decade == 2),
-  scale_limits = c(0, 1), 
+  size_variable = range_relative_rainfall_effect,
+  data = uncertainty_decade_specific_decomposed_impacts |> filter(decade == 2),
+  scale_limits = c(0, 1),
+  uncertainty_limits = uncertainty_dot_limits,
+  uncertainty_breaks = uncertainty_dot_breaks,
   colour_palette = "RdYlBu",
-  legend_title = "Relative effect of climate change on streamflow only rainfall (rainfall_effect / total_effect)"
+  legend_title = "GCM Median Relative Impact of Rainfall (rainfall_effect / total_effect)"
 ) +
   geom_text(
     data = figure_label_2012,
@@ -544,9 +648,9 @@ ggsave(
 
 
 
-# 
-decomposing_impacts |> 
-  filter(gauge == "405274") |> 
+# Leave for now
+decomposing_impacts |>
+  filter(gauge == "405274") |>
   ggplot(aes(x = `Counterfactual - Hist Nat Precipitation`, y = `CO2 Model - Observed Precipitation`)) +
   geom_point() +
   geom_abline(slope = 1) +
