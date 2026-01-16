@@ -645,8 +645,8 @@ uncertainty_decade_specific_decomposed_impacts |>
 
 
 # hard-code limits and range
-uncertainty_dot_limits <- c(0, 0.43)
-uncertainty_dot_breaks <- c(0.05, 0.10, 0.15, 0.20, 0.25, 0.3)
+uncertainty_dot_limits <- c(0, 0.44)
+uncertainty_dot_breaks <- c(0.05, 0.10, 0.15, 0.20, 0.25, 0.3, 0.35, 0.4)
 
 ## Plot 1990-1999 ==============================================================
 figure_label_1990 <- tribble(
@@ -684,7 +684,7 @@ rainfall_impact_1990 <- map_plot(
   )
 
 
-## Plot 2012-2021 ==============================================================
+## Plot 2005-2014 ==============================================================
 figure_label_2012 <- tribble(
   ~lon, ~lat, ~label_name,
   95, 0, "B"
