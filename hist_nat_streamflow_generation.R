@@ -79,13 +79,13 @@ high_evidence_ratio_gauges <- best_CO2_non_CO2_per_gauge |>
 
 ## Prepare GCM rainfall data ===================================================
 prepared_GCM_rainfall <- GCM_rainfall |>
-  select(!c(historical, hist_nat, smooth_scale_term, realisation)) |>
+  select(!c(historical, hist_nat, realisation)) |>
   filter(gauge %in% high_evidence_ratio_gauges) |>
   collect() |>
   pivot_wider(
     id_cols = c(year, GCM, ensemble_id, gauge),
     names_from = season,
-    values_from = smooth_hist_nat
+    values_from = scaled_hist_nat
   ) |>
   mutate(
     annual_scaled_hist_nat_rainfall = warm_season + cool_season

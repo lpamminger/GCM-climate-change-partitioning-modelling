@@ -115,6 +115,26 @@ all_precipitation_data <- GCM_precip |>
   )
 
 
+# Just use the non-smoothed rainfall -------------------------------------------
+all_precipitation_data |>
+  # order of years matter when smoothing
+  arrange(gauge, GCM, ensemble_id, year) |> 
+  left_join(
+    seasonal_precip_obs,
+    by = join_by(year, gauge, season)
+  ) |>
+  # GCM length > obs length --> drop missing
+  drop_na() |>
+  mutate(
+    scaled_hist_nat = naive_scale_term * season_obs_precipitation
+  ) |>  
+  write_parquet(
+    sink = "./Results/scale_term/scaled_hist_nat_rainfall.parquet"
+  )
+
+# Ignore the result of the code
+stop_here <- stop_here()
+
 
 ## Plot naive scaling term =====================================================
 naive_scale_term <- all_precipitation_data |>
@@ -346,8 +366,11 @@ ggsave(
 # Not perfect, I think it should be fine
 
 # Save the results -------------------------------------------------------------
-smooth_scale_term |>
-  select(!naive_scale_term) |>
+#smooth_scale_term |>
+ # select(!naive_scale_term) |>
+
+# No smoothing
+all_precipitation_data |> 
   write_parquet(
     sink = "./Results/scale_term/scaled_hist_nat_rainfall.parquet"
   )
