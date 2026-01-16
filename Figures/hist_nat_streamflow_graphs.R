@@ -645,7 +645,7 @@ uncertainty_decade_specific_decomposed_impacts |>
 
 
 # hard-code limits and range
-uncertainty_dot_limits <- c(0, 0.34)
+uncertainty_dot_limits <- c(0, 0.43)
 uncertainty_dot_breaks <- c(0.05, 0.10, 0.15, 0.20, 0.25, 0.3)
 
 ## Plot 1990-1999 ==============================================================
