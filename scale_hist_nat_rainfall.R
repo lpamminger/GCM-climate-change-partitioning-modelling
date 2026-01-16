@@ -115,8 +115,8 @@ all_precipitation_data <- GCM_precip |>
   )
 
 
-# Just use the non-smoothed rainfall -------------------------------------------
-all_precipitation_data |>
+# Try using non-smoothed rainfall ----------------------------------------------
+naive_all_precipitation_data <- all_precipitation_data |>
   # order of years matter when smoothing
   arrange(gauge, GCM, ensemble_id, year) |> 
   left_join(
@@ -127,87 +127,58 @@ all_precipitation_data |>
   drop_na() |>
   mutate(
     scaled_hist_nat = naive_scale_term * season_obs_precipitation
-  ) |>  
-  write_parquet(
-    sink = "./Results/scale_term/scaled_hist_nat_rainfall.parquet"
-  )
+  ) 
 
-# Ignore the result of the code
-stop_here <- stop_here()
+# I am only working with median of ensemble members for each GCM - have a look at the rainfall plots
+collect_for_plotting <- function(data) {
+  data |> 
+    select(c(year, GCM, ensemble_id, gauge, season, season_obs_precipitation, scaled_hist_nat)) |>
+    # aggregate by year
+    summarise(
+      annual_rainfall_hist_nat = sum(scaled_hist_nat),
+      annual_rainfall_obs = sum(season_obs_precipitation),
+      .by = c(year, gauge, GCM, ensemble_id)
+    ) |>  
+    # get median rainfall for each year
+    summarise(
+      annual_rainfall_obs = median(annual_rainfall_obs), # this will do nothing to the values
+      median_GCM_hist_nat = median(annual_rainfall_hist_nat),
+      .by = c(year, gauge, GCM)
+    )
+    
+}
 
-
-## Plot naive scaling term =====================================================
-naive_scale_term <- all_precipitation_data |>
-  # need to account for GCM and ensemble members
-  # get median of ensemble_id and realisation for each GCM, gauge, year and season
-  summarise(
-    median_naive_scale_term = median(naive_scale_term),
-    max_naive_scale_term = max(naive_scale_term),
-    .by = c(GCM, gauge, year, season)
-  ) |>
-  # get median of GCM ensembles
-  summarise(
-    median_GCM_naive_scale_term = median(median_naive_scale_term),
-    max_GCM_naive_scale_term = max(max_naive_scale_term),
-    p90_GCM_naive_scale_term = quantile(median_naive_scale_term, probs = 0.9),
-    .by = c(gauge, year, season)
-  ) |>
-  left_join(
-    seasonal_precip_obs,
-    by = join_by(year, gauge, season)
-  ) |>
-  # GCM length > obs length --> drop missing
-  drop_na()
-
-
-# Quick numerical check
-naive_scale_term |>
-  select(median_GCM_naive_scale_term, max_GCM_naive_scale_term, p90_GCM_naive_scale_term) |>
-  summary()
-
-# I will be applying the median in the models focus on that
-# The large maximum scaling factors suggest GCM ensemble variability will be high
-
-
-naive_scale_term_plot <- naive_scale_term |>
-  # scale obs
-  mutate(
-    median_naive_scaled_hist_nat = median_GCM_naive_scale_term * season_obs_precipitation,
-    max_naive_scaled_hist_nat = max_GCM_naive_scale_term * season_obs_precipitation
-  ) |>
-  group_by(
-    gauge
-  ) |>
-  mutate(index = row_number()) |>
-  ungroup() |>
-  pivot_longer(
-    cols = c(max_naive_scaled_hist_nat, season_obs_precipitation),
-    names_to = "obs_vs_scaled",
-    values_to = "seasonal_precipitation_mm"
-  ) |>
-  ggplot(aes(x = index, y = seasonal_precipitation_mm, colour = obs_vs_scaled)) +
-  geom_line() +
+non_smoothed_rainfall <- naive_all_precipitation_data |> 
+  collect_for_plotting() |> 
+  ggplot(aes(x = year, y = median_GCM_hist_nat, colour = GCM)) +
+  geom_line(alpha = 0.3) +
+  geom_line(
+    aes(x = year, y = annual_rainfall_obs),
+    colour = "red"
+  ) +
+  labs(
+    x = "Year",
+    y = "Rainfall (mm)"
+  ) +
   theme_bw() +
   facet_wrap(~gauge, scales = "free_y")
 
-
 ggsave(
-  file = "naive_max_GCM_scaled_hist_nat_timeseries.pdf",
+  file = "naive_non_smoothed_rainfall_compared_to_observed.pdf",
   path = "./Figures/scaling_rainfall",
-  plot = naive_scale_term_plot,
+  plot = non_smoothed_rainfall,
   device = "pdf",
   width = 1189,
   height = 841,
   units = "mm"
 )
 
+## Outcome of plot
+## - there are unrealistic peaks - almost double the rainfall
+## - the actual results are probably closer to a 20 % increase
+## - smoothing is required
 
 
-# The median GCM outputs look reasonable without scaling
-# The maximum GCM outputs do not look reasonable
-# To be on the safe side smooth the scaling terms
-# The maximum GCM scaling terms cannot be helped with scaling - leave for now
-# Do I do it for all GCM and ensemble members?
 
 # Apply moving window to smooth out scaling term -------------------------------
 
@@ -222,75 +193,9 @@ rollapply <- function(x, n, f, ...) {
   return(out)
 }
 
-moving_window_sensitivity_test <- function(moving_window_length) {
-  smooth_scale_term <- all_precipitation_data |>
-    mutate(
-      smooth_scale_term = rollapply(naive_scale_term, n = moving_window_length, f = mean),
-      .by = c(GCM, ensemble_id, realisation, gauge)
-    ) |>
-    summarise(
-      median_smooth_scale_term = median(smooth_scale_term),
-      p90_smooth_scale_term = quantile(smooth_scale_term, probs = 0.9, na.rm = T),
-      .by = c(GCM, gauge, year, season)
-    ) |>
-    # get median of GCM ensembles
-    summarise(
-      median_GCM_smooth_scale_term = median(median_smooth_scale_term),
-      median_p90_GCM_smooth_scale_term = median(p90_smooth_scale_term),
-      .by = c(gauge, year, season)
-    ) |>
-    left_join(
-      seasonal_precip_obs,
-      by = join_by(year, gauge, season)
-    ) |>
-    # GCM length > obs length --> drop missing
-    drop_na()
 
-
-  smooth_scale_term_plot <- smooth_scale_term |>
-    # scale obs using either median or max
-    mutate(
-      median_p90_smooth_scaled_hist_nat = median_p90_GCM_smooth_scale_term * season_obs_precipitation
-    ) |>
-    group_by(
-      gauge
-    ) |>
-    mutate(index = row_number()) |>
-    ungroup() |>
-    pivot_longer(
-      cols = c(median_p90_smooth_scaled_hist_nat, season_obs_precipitation),
-      names_to = "obs_vs_scaled",
-      values_to = "seasonal_precipitation_mm"
-    ) |>
-    ggplot(aes(x = index, y = seasonal_precipitation_mm, colour = obs_vs_scaled)) +
-    geom_line() +
-    theme_bw() +
-    facet_wrap(~gauge, scales = "free_y")
-
-
-  ggsave(
-    file = paste0("median_p90_smooth_scaled_window_", moving_window_length, "_timeseries.pdf"),
-    path = "./Figures/scaling_rainfall",
-    plot = smooth_scale_term_plot,
-    device = "pdf",
-    width = 1189,
-    height = 841,
-    units = "mm"
-  )
-}
-
-walk(
-  .x = c(5, 10, 20), # 5 year, 10 year, 20 year, 40 year - double because cool/warm season
-  .f = moving_window_sensitivity_test
-)
-
-
-
-
-# Double check the scaling term for each GCM and ensemble combination ----------
-# Based of the sensitivity graphs n = 10 looks good
-
-selected_window_years <- 5
+## Try different moving window lengths =========================================
+selected_window_years <- 10 # manually change
 
 smooth_scale_term <- all_precipitation_data |>
   # order of years matter when smoothing
@@ -306,16 +211,35 @@ smooth_scale_term <- all_precipitation_data |>
   # GCM length > obs length --> drop missing
   drop_na() |>
   mutate(
-    smooth_hist_nat = smooth_scale_term * season_obs_precipitation
+    scaled_hist_nat = smooth_scale_term * season_obs_precipitation
   )
 
+smooth_year_rainfall <- smooth_scale_term |> 
+  collect_for_plotting() |> 
+  ggplot(aes(x = year, y = median_GCM_hist_nat, colour = GCM)) +
+  geom_line(alpha = 0.3) +
+  geom_line(
+    aes(x = year, y = annual_rainfall_obs),
+    colour = "red"
+  ) +
+  labs(
+    x = "Year",
+    y = "Rainfall (mm)"
+  ) +
+  theme_bw() +
+  facet_wrap(~gauge, scales = "free_y")
 
-# some years removed after smoothing
-#x <- smooth_scale_term |> 
-#  filter(GCM == "BCC-CSM2-MR") |> 
-#  filter(ensemble_id == "r1i1p1f1") |> 
-#  filter(gauge == "224213") |> 
-#  arrange(year)
+ggsave(
+  file = "smoothed_10_year_rainfall_compared_to_observed.pdf",
+  path = "./Figures/scaling_rainfall",
+  plot = smooth_year_rainfall,
+  device = "pdf",
+  width = 1189,
+  height = 841,
+  units = "mm"
+)
+
+
 
 # Quick numbers check
 smooth_scale_term |>
@@ -364,13 +288,92 @@ ggsave(
 
 # Pretty much all values are less than (> 4000 are not)
 # Not perfect, I think it should be fine
+# I think a sensitivity test will be required
 
 # Save the results -------------------------------------------------------------
-#smooth_scale_term |>
- # select(!naive_scale_term) |>
-
-# No smoothing
-all_precipitation_data |> 
+smooth_scale_term |>
+  select(!naive_scale_term) |>
   write_parquet(
     sink = "./Results/scale_term/scaled_hist_nat_rainfall.parquet"
   )
+
+
+
+stop_here()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# OLD CODE
+moving_window_sensitivity_test <- function(moving_window_length) {
+  smooth_scale_term <- all_precipitation_data |>
+    mutate(
+      smooth_scale_term = rollapply(naive_scale_term, n = moving_window_length, f = mean),
+      .by = c(GCM, ensemble_id, realisation, gauge)
+    ) |>
+    summarise(
+      median_smooth_scale_term = median(smooth_scale_term),
+      p90_smooth_scale_term = quantile(smooth_scale_term, probs = 0.9, na.rm = T),
+      .by = c(GCM, gauge, year, season)
+    ) |>
+    # get median of GCM ensembles
+    summarise(
+      median_GCM_smooth_scale_term = median(median_smooth_scale_term),
+      median_p90_GCM_smooth_scale_term = median(p90_smooth_scale_term),
+      .by = c(gauge, year, season)
+    ) |>
+    left_join(
+      seasonal_precip_obs,
+      by = join_by(year, gauge, season)
+    ) |>
+    # GCM length > obs length --> drop missing
+    drop_na()
+  
+  
+  smooth_scale_term_plot <- smooth_scale_term |>
+    # scale obs using either median or max
+    mutate(
+      median_p90_smooth_scaled_hist_nat = median_p90_GCM_smooth_scale_term * season_obs_precipitation
+    ) |>
+    group_by(
+      gauge
+    ) |>
+    mutate(index = row_number()) |>
+    ungroup() |>
+    pivot_longer(
+      cols = c(median_p90_smooth_scaled_hist_nat, season_obs_precipitation),
+      names_to = "obs_vs_scaled",
+      values_to = "seasonal_precipitation_mm"
+    ) |>
+    ggplot(aes(x = index, y = seasonal_precipitation_mm, colour = obs_vs_scaled)) +
+    geom_line() +
+    theme_bw() +
+    facet_wrap(~gauge, scales = "free_y")
+  
+  
+  ggsave(
+    file = paste0("median_p90_smooth_scaled_window_", moving_window_length, "_timeseries.pdf"),
+    path = "./Figures/scaling_rainfall",
+    plot = smooth_scale_term_plot,
+    device = "pdf",
+    width = 1189,
+    height = 841,
+    units = "mm"
+  )
+}
+
+walk(
+  .x = c(5, 10, 20), # 5 year, 10 year, 20 year, 40 year - double because cool/warm season
+  .f = moving_window_sensitivity_test
+)
+
