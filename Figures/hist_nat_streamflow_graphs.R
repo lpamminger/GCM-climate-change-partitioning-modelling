@@ -201,9 +201,9 @@ plot <- test_plotting_data |>
   theme_bw() +
   scale_shape_manual(
     labels = c(
-      bquote(CO[2] ~ "Model - Observed Precipitation"),
-      "Counterfactual - Observed Precipitation",
-      "Counterfactual - Hist Nat Precipitation"
+      "With the Impact of Climate Change",
+      "Only Climate Change Rainfall Shifts",
+      "Without the Impact of Climate Change"
     ),
     values = c(15, 16, 17),
     drop = FALSE
@@ -211,9 +211,9 @@ plot <- test_plotting_data |>
   scale_colour_brewer(
     palette = "Dark2",
     labels = c(
-      bquote(CO[2] ~ "Model - Observed Precipitation"),
-      "Counterfactual - Observed Precipitation",
-      "Counterfactual - Hist Nat Precipitation"
+      "With the Impact of Climate Change",
+      "Only Climate Change Rainfall Shifts",
+      "Without the Impact of Climate Change"
       )
     ) +
   labs(
@@ -738,14 +738,14 @@ ggsave(
 ## for results get count of relative_rainfall_effect ===========================
 ### Compare catchment with partitioning having greater effect than rainfall between decades
 uncertainty_decade_specific_decomposed_impacts |> 
-  filter(decade == 1) |> # change to 2
+  filter(decade == 2) |> # change to 2
   filter(relative_partitioning_effect >= 0.5) |> 
   pull(relative_partitioning_effect) |> 
   length()
 
 ### Compare Australia wide average fraction between decades
 uncertainty_decade_specific_decomposed_impacts |> 
-  filter(decade == 2) |> 
+  filter(decade == 1) |> 
   pull(relative_partitioning_effect) |> 
   mean()
 
@@ -923,8 +923,8 @@ total_impact_of_CC_on_streamflow_plot <- (total_impact_1990 | total_impact_2012)
 
 
 ggsave(
-  file = "total_impact_of_CC_on_streamflow.pdf",
-  path = "./Figures",
+  file = "map_total_impact_of_CC_on_streamflow.pdf",
+  path = "./Figures/Main",
   plot = total_impact_of_CC_on_streamflow_plot,
   device = "pdf",
   width = 297,
