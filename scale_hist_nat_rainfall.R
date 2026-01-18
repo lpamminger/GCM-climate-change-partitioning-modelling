@@ -148,8 +148,22 @@ collect_for_plotting <- function(data) {
     
 }
 
+# list of GCMs that will be used - after filtering in after filtering in 
+# hist_nat_streamflow_generation
+# iterative approach
+final_GCMs <- c(
+  "ACCESS-CM2", 
+  "ACCESS-ESM1-5",
+  "BCC-CSM2-MR",
+  "CNRM-CM6-1",
+  "CanESM5",
+  "IPSL-CM6A-LR",
+  "MRI-ESM2-0"
+  )
+
 non_smoothed_rainfall <- naive_all_precipitation_data |> 
   collect_for_plotting() |> 
+  filter(GCM %in% final_GCMs) |> 
   ggplot(aes(x = year, y = median_GCM_hist_nat, colour = GCM)) +
   geom_line(alpha = 0.3) +
   geom_line(
@@ -216,6 +230,7 @@ smooth_scale_term <- all_precipitation_data |>
 
 smooth_year_rainfall <- smooth_scale_term |> 
   collect_for_plotting() |> 
+  filter(GCM %in% final_GCMs) |> 
   ggplot(aes(x = year, y = median_GCM_hist_nat, colour = GCM)) +
   geom_line(alpha = 0.3) +
   geom_line(
