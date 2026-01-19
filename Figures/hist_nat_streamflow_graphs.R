@@ -362,9 +362,19 @@ uncertainty_decade_specific_decomposed_impacts <- decade_specific_decomposed_imp
     relative_partitioning_effect = if_else(total_effect > partitioning_effect, partitioning_effect / total_effect, total_effect / partitioning_effect),
     # assume relative_rainfall_effect is complementary
     relative_rainfall_effect = 1 - relative_partitioning_effect
-  ) |> # get uncertainty of relative rainfall_effect
+  ) |> 
+  # account for total effect percentage change uncertainty
+  mutate(
+    total_effect_CC_percent = if_else(
+      total_effect < partitioning_effect,
+      total_effect / sum_counterfactual_hist_nat,
+      -total_effect / sum_counterfactual_hist_nat
+    ) * 100
+  ) |> 
+  # get IQR as a measure of uncertainty
   summarise(
     range_relative_rainfall_effect = IQR(relative_partitioning_effect), # max(range(relative_rainfall_effect)) - min(range(relative_rainfall_effect)),
+    range_total_CC_percentage_effect = IQR(total_effect_CC_percent),
     .by = c(gauge, decade)
   ) |> # 4. join uncertainty values to existing values
   right_join(
@@ -852,13 +862,13 @@ ggsave(
 
 # Use relative rainfall effect column (total_effect_CC_percent * relative_rainfall) - see if it gives me the same results
 # it does
-test_data <- uncertainty_decade_specific_decomposed_impacts |>
+total_effect_data <- uncertainty_decade_specific_decomposed_impacts |>
   mutate(
     total_effect_CC_percent = if_else(
-      sum_CO2_obs > sum_counterfactual_hist_nat,
-      NA,
+      total_effect < partitioning_effect,
+      total_effect / sum_counterfactual_hist_nat,
       -total_effect / sum_counterfactual_hist_nat
-    ) * 100
+    ) #* 100 - label_percent() does this
   ) |>
   # use total effect and rainfall effect to estimate components
   mutate(
@@ -866,16 +876,329 @@ test_data <- uncertainty_decade_specific_decomposed_impacts |>
     partitioning_effect_CC_percent = (1 - relative_rainfall_effect) * total_effect_CC_percent
   )
 
+
+## Scale legends correctly =====================================================
+
+### Size variable ##############################################################
+total_effect_data |> pull(range_total_CC_percentage_effect) |> range()
+uncertainty_dot_limits <- c(1.6, 37) # HARD CODED
+uncertainty_dot_breaks <- seq(from = 1.6, to = 37, length.out = 7)
+
+
+### Fill variable ##############################################################
+total_effect_data |>   pull(total_effect_CC_percent) |> range()
+main_variable_limits <- c(-0.84, 0.11) # HARD CODED
+
+main_variable_breaks <- sort(c(seq(from = -0.84, to = 0, length.out = 5), 0.11))
+
+rescale_colourbar <- main_variable_breaks |> 
+  scales::rescale(to = c(0, 1))
+
+# Need to adjust rescale_colourbar. The zero values is too blue it should be on the transition
+# edit manually - make the zero on the edge of yellow and blue. Make numbers bigger to do this
+rescale_colourbar <- c(0.0, 0.5, 0.7, 0.9, 0.98, 1.0)
+
+
+
+
+test_map_plot <- function(plotting_variable, size_variable, data, main_variable_limits, main_variable_breaks, rescale_colourbar, uncertainty_limits, uncertainty_breaks, colour_palette, legend_title) {
+  
+
+  data <- data |>
+    rename(
+      plotting_variable = {{ plotting_variable }},
+      size_variable = {{ size_variable }}
+    )
+  
+  
+  ## Make map template using ozmaps ============================================
+  aus_map <- generate_aus_map_sf()
+  
+  ## Get inset data ============================================================
+  ### Filter data by state #####################################################
+  QLD_data <- data |>
+    filter(state == "QLD")
+  
+  NSW_data <- data |>
+    filter(state == "NSW")
+  
+  VIC_data <- data |>
+    filter(state == "VIC")
+  
+  WA_data <- data |>
+    filter(state == "WA")
+  
+  TAS_data <- data |>
+    filter(state == "TAS")
+  
+  
+  ## Generate inset plots ======================================================
+  inset_plot_QLD <- aus_map |>
+    filter(state == "QLD") |>
+    ggplot() +
+    geom_sf() +
+    geom_point(
+      data = QLD_data,
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
+      show.legend = FALSE,
+      stroke = 0.1,
+      colour = "black",
+      shape = 21
+    ) +
+    scale_fill_distiller(
+      palette = colour_palette,
+      limits = main_variable_limits,
+      breaks = main_variable_breaks,
+      values = rescale_colourbar,
+      labels = scales::label_percent(),
+      direction = 1
+    ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
+    theme_void()
+  
+
+  
+  inset_plot_NSW <- aus_map |>
+    filter(state == "NSW") |>
+    ggplot() +
+    geom_sf() +
+    geom_point(
+      data = NSW_data,
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
+      show.legend = FALSE,
+      stroke = 0.1,
+      colour = "black",
+      shape = 21
+    ) +
+    scale_fill_distiller(
+      palette = colour_palette,
+      limits = main_variable_limits,
+      breaks = main_variable_breaks,
+      values = rescale_colourbar,
+      labels = scales::label_percent(),
+      direction = 1
+    ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
+    theme_void()
+  
+  
+  inset_plot_VIC <- aus_map |>
+    filter(state == "VIC") |>
+    ggplot() +
+    geom_sf() +
+    geom_point(
+      data = VIC_data,
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
+      show.legend = FALSE,
+      stroke = 0.1,
+      colour = "black",
+      shape = 21
+    ) +
+    scale_fill_distiller(
+      palette = colour_palette,
+      limits = main_variable_limits,
+      breaks = main_variable_breaks,
+      values = rescale_colourbar,
+      labels = scales::label_percent(),
+      direction = 1
+    ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
+    theme_void()
+  
+  inset_plot_WA <- aus_map |>
+    filter(state == "WA") |>
+    ggplot() +
+    geom_sf() +
+    geom_point(
+      data = WA_data,
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
+      show.legend = FALSE,
+      stroke = 0.1,
+      colour = "black",
+      shape = 21
+    ) +
+    scale_fill_distiller(
+      palette = colour_palette,
+      limits = main_variable_limits,
+      breaks = main_variable_breaks,
+      values = rescale_colourbar,
+      labels = scales::label_percent(),
+      direction = 1
+    ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
+    theme_void()
+  
+  
+  inset_plot_TAS <- aus_map |>
+    filter(state == "TAS") |>
+    ggplot() +
+    geom_sf() +
+    geom_point(
+      data = TAS_data,
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
+      show.legend = FALSE,
+      stroke = 0.1,
+      colour = "black",
+      shape = 21
+    ) +
+    scale_fill_distiller(
+      palette = colour_palette,
+      limits = main_variable_limits,
+      breaks = main_variable_breaks,
+      values = rescale_colourbar,
+      labels = scales::label_percent(),
+      direction = 1
+    ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
+    theme_void()
+  
+  
+  ## The big map ===============================================================
+  aus_map |>
+    ggplot() +
+    geom_sf() +
+    geom_point(
+      data = data,
+      aes(x = lon, y = lat, fill = plotting_variable, size = size_variable),
+      stroke = 0.1,
+      colour = "black",
+      shape = 21
+    ) +
+    scale_fill_distiller(
+      palette = colour_palette,
+      limits = main_variable_limits,
+      breaks = main_variable_breaks,
+      values = rescale_colourbar,
+      labels = scales::label_percent(),
+      direction = 1
+    ) +
+    scale_size_binned(
+      limits = uncertainty_limits,
+      breaks = uncertainty_breaks,
+      range = c(1, 4)
+    ) +
+    guides(size = guide_bins(show.limits = TRUE)) +
+    theme_bw() +
+    # expand map
+    coord_sf(xlim = c(95, 176), ylim = c(-60, 0)) +
+    # magnify WA
+    geom_magnify(
+      from = c(114, 118, -35.5, -30),
+      to = c(93, 112, -36, -10),
+      shadow = FALSE,
+      expand = 0,
+      plot = inset_plot_WA,
+      proj = "single"
+    ) +
+    # magnify VIC
+    geom_magnify(
+      # aes(from = state == "VIC"), # use aes rather than manually selecting area
+      from = c(141, 149.5, -39, -34),
+      to = c(95, 136, -38, -60),
+      shadow = FALSE,
+      plot = inset_plot_VIC,
+      proj = "single"
+    ) +
+    # magnify QLD
+    geom_magnify(
+      from = c(145, 155, -29.2, -15),
+      to = c(157, 178, -29.5, 1.5),
+      shadow = FALSE,
+      expand = 0,
+      plot = inset_plot_QLD,
+      proj = "single"
+    ) +
+    # magnify NSW
+    geom_magnify(
+      from = c(146.5, 154, -38, -28.1),
+      to = c(157, 178, -61, -30.5),
+      shadow = FALSE,
+      expand = 0,
+      plot = inset_plot_NSW,
+      proj = "single"
+    ) +
+    # magnify TAS
+    geom_magnify(
+      from = c(144, 149, -40, -44),
+      to = c(140, 155, -45, -61),
+      shadow = FALSE,
+      expand = 0,
+      plot = inset_plot_TAS,
+      proj = "single"
+    ) +
+    labs(
+      x = NULL, # "Latitude",
+      y = NULL, # "Longitude",
+      fill = legend_title,
+      size = "IQR from GCM Uncertainty"
+    ) +
+    theme(
+      legend.title = element_text(hjust = 0.5),
+      legend.title.position = "top",
+      legend.background = element_rect(colour = "black"),
+      axis.text = element_blank(),
+      legend.position = "inside",
+      legend.position.inside = c(0.346, 0.9), # constants used to move the legend in the right place
+      legend.box = "horizontal", # side-by-side legends
+      # panel.border = element_blank(),
+      panel.grid = element_blank(),
+      axis.ticks = element_blank(),
+      # legend.key.width = unit(1, "null"), this looks nice but I can't get it to work https://tidyverse.org/blog/2024/02/ggplot2-3-5-0-legends/
+      legend.margin = margin(t = 5, b = 5, r = 20, l = 20, unit = "pt") # add extra padding around legend box to avoid -1.6 intersecting with line
+    ) +
+    guides(
+      fill = guide_colourbar(
+        direction = "horizontal",
+        barwidth = unit(12, "cm")
+      ),
+      size = guide_bins(
+        show.limits = TRUE,
+        direction = "horizontal",
+        keywidth = 2
+      )
+    )
+}
+
+
+
+
 ## Total effect ================================================================
-total_impact_1990 <- map_plot(
+total_impact_1990 <- test_map_plot(
   plotting_variable = total_effect_CC_percent,
-  size_variable = range_relative_rainfall_effect,
-  data = test_data |> filter(decade == 1),
-  scale_limits = c(-100, 0),
+  size_variable = range_total_CC_percentage_effect,
+  data = total_effect_data |> filter(decade == 1),
+  main_variable_limits = main_variable_limits,
+  main_variable_breaks = main_variable_breaks, 
+  rescale_colourbar = rescale_colourbar,
   uncertainty_limits = uncertainty_dot_limits,
   uncertainty_breaks = uncertainty_dot_breaks,
   colour_palette = "RdYlBu",
-  legend_title = "Total Percentage Change of Climate Change on Streamflow"
+  legend_title = "Total Change in Streamflow Due to Climate Change"
 ) +
   geom_text(
     data = figure_label_1990,
@@ -892,15 +1215,17 @@ total_impact_1990 <- map_plot(
   )
 
 
-total_impact_2012 <- map_plot(
+total_impact_2012 <- test_map_plot(
   plotting_variable = total_effect_CC_percent,
-  size_variable = range_relative_rainfall_effect,
-  data = test_data |> filter(decade == 2),
-  scale_limits = c(-100, 0),
+  size_variable = range_total_CC_percentage_effect,
+  data = total_effect_data |> filter(decade == 2),
+  main_variable_limits = main_variable_limits,
+  main_variable_breaks = main_variable_breaks, 
+  rescale_colourbar = rescale_colourbar,
   uncertainty_limits = uncertainty_dot_limits,
   uncertainty_breaks = uncertainty_dot_breaks,
   colour_palette = "RdYlBu",
-  legend_title = "Total Percentage Change of Climate Change on Streamflow"
+  legend_title = "Total Change in Streamflow Due to Climate Change"
 ) +
   geom_text(
     data = figure_label_2012,
@@ -933,63 +1258,6 @@ ggsave(
 )
 
 
-## Rainfall effect =============================================================
-test_data |>
-  pull(rainfall_effect_CC_percent) |>
-  range(na.rm = T)
 
-rainfall_impact_1990 <- map_plot(
-  plotting_variable = rainfall_effect_CC_percent,
-  size_variable = range_relative_rainfall_effect,
-  data = test_data |> filter(decade == 1),
-  scale_limits = c(-60, 0),
-  uncertainty_limits = uncertainty_dot_limits,
-  uncertainty_breaks = uncertainty_dot_breaks,
-  colour_palette = "RdYlBu",
-  legend_title = "Climate Change Impact of Rainfall on Streamflow"
-) +
-  geom_text(
-    data = figure_label_1990,
-    aes(x = lon, y = lat, label = label_name),
-    fontface = "bold",
-    size = 10,
-    size.unit = "pt"
-  ) +
-  geom_text(
-    data = decade_label_1990,
-    aes(x = lon, y = lat, label = label_name),
-    size = 10,
-    size.unit = "pt"
-  )
-
-
-rainfall_impact_2012 <- map_plot(
-  plotting_variable = rainfall_effect_CC_percent,
-  size_variable = range_relative_rainfall_effect,
-  data = test_data |> filter(decade == 2),
-  scale_limits = c(-60, 0),
-  uncertainty_limits = uncertainty_dot_limits,
-  uncertainty_breaks = uncertainty_dot_breaks,
-  colour_palette = "RdYlBu",
-  legend_title = "Climate Change Impact of Rainfall on Streamflow"
-) +
-  geom_text(
-    data = figure_label_2012,
-    aes(x = lon, y = lat, label = label_name),
-    fontface = "bold",
-    size = 10,
-    size.unit = "pt"
-  ) +
-  geom_text(
-    data = decade_label_2012,
-    aes(x = lon, y = lat, label = label_name),
-    size = 10,
-    size.unit = "pt"
-  )
-
-
-(rainfall_impact_1990 | rainfall_impact_2012) +
-  plot_layout(guides = "collect") &
-  theme(legend.position = "bottom")
 
 
