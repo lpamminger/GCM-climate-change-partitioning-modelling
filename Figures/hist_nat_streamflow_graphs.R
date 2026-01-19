@@ -126,7 +126,7 @@ make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, 
   # Link: https://forum.posit.co/t/embrace-operator-for-tidy-selection-vs-data-masking/173084
   # Possible cause: {{ y_axis_column }} isn't unquoting when it's doing the mutate
   # Work around using rlang::ensym
-  
+
   col <- rlang::ensym(y_axis_column)
 
   data |>
@@ -149,13 +149,12 @@ make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, 
     # set zero values to -1 the adjustment works
     mutate(
       ylab = if_else(ylab == 0, -1, ylab)
-    ) |> 
+    ) |>
     # apply hjust and vjust
     mutate(
       xlab = if_else(xlab > 0, xlab + (xlab * hjust), xlab + (xlab * -hjust)),
       ylab = if_else(ylab > 0, ylab + (ylab * vjust), ylab + (ylab * -vjust))
     )
-    
 }
 
 
@@ -214,8 +213,8 @@ plot <- test_plotting_data |>
       "With the Impact of Climate Change",
       "Only Climate Change Rainfall Shifts",
       "Without the Impact of Climate Change"
-      )
-    ) +
+    )
+  ) +
   labs(
     x = "Time (Year)",
     y = "Streamflow (mm)",
@@ -362,7 +361,7 @@ uncertainty_decade_specific_decomposed_impacts <- decade_specific_decomposed_imp
     relative_partitioning_effect = if_else(total_effect > partitioning_effect, partitioning_effect / total_effect, total_effect / partitioning_effect),
     # assume relative_rainfall_effect is complementary
     relative_rainfall_effect = 1 - relative_partitioning_effect
-  ) |> 
+  ) |>
   # account for total effect percentage change uncertainty
   mutate(
     total_effect_CC_percent = if_else(
@@ -370,7 +369,7 @@ uncertainty_decade_specific_decomposed_impacts <- decade_specific_decomposed_imp
       total_effect / sum_counterfactual_hist_nat,
       -total_effect / sum_counterfactual_hist_nat
     ) * 100
-  ) |> 
+  ) |>
   # get IQR as a measure of uncertainty
   summarise(
     range_relative_rainfall_effect = IQR(relative_partitioning_effect), # max(range(relative_rainfall_effect)) - min(range(relative_rainfall_effect)),
@@ -747,16 +746,16 @@ ggsave(
 
 ## for results get count of relative_rainfall_effect ===========================
 ### Compare catchment with partitioning having greater effect than rainfall between decades
-uncertainty_decade_specific_decomposed_impacts |> 
+uncertainty_decade_specific_decomposed_impacts |>
   filter(decade == 2) |> # change to 2
-  filter(relative_partitioning_effect >= 0.5) |> 
-  pull(relative_partitioning_effect) |> 
+  filter(relative_partitioning_effect >= 0.5) |>
+  pull(relative_partitioning_effect) |>
   length()
 
 ### Compare Australia wide average fraction between decades
-uncertainty_decade_specific_decomposed_impacts |> 
-  filter(decade == 1) |> 
-  pull(relative_partitioning_effect) |> 
+uncertainty_decade_specific_decomposed_impacts |>
+  filter(decade == 1) |>
+  pull(relative_partitioning_effect) |>
   mean()
 
 # Plot total, rainfall and partitioning effect timeseries ----------------------
@@ -776,7 +775,7 @@ decomposed_timeseries_data <- decomposing_impacts |>
     cols = ends_with("effect"),
     names_to = "effect",
     values_to = "streamflow"
-  ) |> 
+  ) |>
   mutate(
     streamflow = -1 * streamflow # multiple by negative 1 to get loss and gain correct
   )
@@ -801,11 +800,11 @@ plot_decomposed_timeseries <- decomposed_timeseries_data |>
       effect == "total_effect" ~ "Total Effect"
     )
   ) |>
-  filter(gauge %in% handpicked_catchments) |> 
+  filter(gauge %in% handpicked_catchments) |>
   ggplot(aes(x = year, y = streamflow, shape = effect, colour = effect)) +
   geom_line() +
-  geom_point() + 
-  #geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point() +
+  # geom_hline(yintercept = 0, linetype = "dashed") +
   geom_text(
     mapping = aes(x = xlab, y = ylab, label = label_name),
     data = facet_label_effect,
@@ -814,7 +813,7 @@ plot_decomposed_timeseries <- decomposed_timeseries_data |>
     size = 10,
     size.unit = "pt"
   ) +
-   facet_wrap(~gauge, scales = "free_y") +
+  facet_wrap(~gauge, scales = "free_y") +
   scale_colour_brewer(palette = "Dark2") +
   theme_bw() +
   labs(
@@ -877,61 +876,84 @@ total_effect_data <- uncertainty_decade_specific_decomposed_impacts |>
   )
 
 
+## Statistics for the results ==================================================
+total_effect_data |>
+  mutate(total_effect_CC_percent = total_effect_CC_percent * 100) |>
+  summarise(
+    mean = mean(total_effect_CC_percent),
+    sd = sd(total_effect_CC_percent),
+    mean_uncertainty = mean(range_total_CC_percentage_effect),
+    .by = decade
+  )
+
+
+total_effect_data |>
+  mutate(total_effect_CC_percent = total_effect_CC_percent * 100) |>
+  summarise(
+    mean = mean(total_effect_CC_percent),
+    sd = sd(total_effect_CC_percent),
+    mean_uncertainty = mean(range_total_CC_percentage_effect),
+    n = n(),
+    .by = c(decade, state)
+  ) |>
+  arrange(state, decade)
+
+
 ## Scale legends correctly =====================================================
 
 ### Size variable ##############################################################
-total_effect_data |> pull(range_total_CC_percentage_effect) |> range()
+total_effect_data |>
+  pull(range_total_CC_percentage_effect) |>
+  range()
 uncertainty_dot_limits <- c(1.6, 37) # HARD CODED
 uncertainty_dot_breaks <- seq(from = 1.6, to = 37, length.out = 7)
 
 
 ### Fill variable ##############################################################
-total_effect_data |>   pull(total_effect_CC_percent) |> range()
+total_effect_data |>
+  pull(total_effect_CC_percent) |>
+  range()
 main_variable_limits <- c(-0.84, 0.11) # HARD CODED
 
 main_variable_breaks <- sort(c(seq(from = -0.84, to = 0, length.out = 5), 0.11))
 
-rescale_colourbar <- main_variable_breaks |> 
+rescale_colourbar <- main_variable_breaks |>
   scales::rescale(to = c(0, 1))
 
 # Need to adjust rescale_colourbar. The zero values is too blue it should be on the transition
 # edit manually - make the zero on the edge of yellow and blue. Make numbers bigger to do this
-rescale_colourbar <- c(0.0, 0.5, 0.7, 0.9, 0.98, 1.0)
-
-
+rescale_colourbar <- c(0.0, 0.45, 0.7, 0.9, 0.99, 1.0)
 
 
 test_map_plot <- function(plotting_variable, size_variable, data, main_variable_limits, main_variable_breaks, rescale_colourbar, uncertainty_limits, uncertainty_breaks, colour_palette, legend_title) {
-  
-
   data <- data |>
     rename(
       plotting_variable = {{ plotting_variable }},
       size_variable = {{ size_variable }}
     )
-  
-  
+
+
   ## Make map template using ozmaps ============================================
   aus_map <- generate_aus_map_sf()
-  
+
   ## Get inset data ============================================================
   ### Filter data by state #####################################################
   QLD_data <- data |>
     filter(state == "QLD")
-  
+
   NSW_data <- data |>
     filter(state == "NSW")
-  
+
   VIC_data <- data |>
     filter(state == "VIC")
-  
+
   WA_data <- data |>
     filter(state == "WA")
-  
+
   TAS_data <- data |>
     filter(state == "TAS")
-  
-  
+
+
   ## Generate inset plots ======================================================
   inset_plot_QLD <- aus_map |>
     filter(state == "QLD") |>
@@ -960,9 +982,8 @@ test_map_plot <- function(plotting_variable, size_variable, data, main_variable_
     ) +
     guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
 
-  
+
   inset_plot_NSW <- aus_map |>
     filter(state == "NSW") |>
     ggplot() +
@@ -990,8 +1011,8 @@ test_map_plot <- function(plotting_variable, size_variable, data, main_variable_
     ) +
     guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
-  
+
+
   inset_plot_VIC <- aus_map |>
     filter(state == "VIC") |>
     ggplot() +
@@ -1019,7 +1040,7 @@ test_map_plot <- function(plotting_variable, size_variable, data, main_variable_
     ) +
     guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
+
   inset_plot_WA <- aus_map |>
     filter(state == "WA") |>
     ggplot() +
@@ -1047,8 +1068,8 @@ test_map_plot <- function(plotting_variable, size_variable, data, main_variable_
     ) +
     guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
-  
+
+
   inset_plot_TAS <- aus_map |>
     filter(state == "TAS") |>
     ggplot() +
@@ -1076,8 +1097,8 @@ test_map_plot <- function(plotting_variable, size_variable, data, main_variable_
     ) +
     guides(size = guide_bins(show.limits = TRUE)) +
     theme_void()
-  
-  
+
+
   ## The big map ===============================================================
   aus_map |>
     ggplot() +
@@ -1185,15 +1206,13 @@ test_map_plot <- function(plotting_variable, size_variable, data, main_variable_
 }
 
 
-
-
 ## Total effect ================================================================
 total_impact_1990 <- test_map_plot(
   plotting_variable = total_effect_CC_percent,
   size_variable = range_total_CC_percentage_effect,
   data = total_effect_data |> filter(decade == 1),
   main_variable_limits = main_variable_limits,
-  main_variable_breaks = main_variable_breaks, 
+  main_variable_breaks = main_variable_breaks,
   rescale_colourbar = rescale_colourbar,
   uncertainty_limits = uncertainty_dot_limits,
   uncertainty_breaks = uncertainty_dot_breaks,
@@ -1220,7 +1239,7 @@ total_impact_2012 <- test_map_plot(
   size_variable = range_total_CC_percentage_effect,
   data = total_effect_data |> filter(decade == 2),
   main_variable_limits = main_variable_limits,
-  main_variable_breaks = main_variable_breaks, 
+  main_variable_breaks = main_variable_breaks,
   rescale_colourbar = rescale_colourbar,
   uncertainty_limits = uncertainty_dot_limits,
   uncertainty_breaks = uncertainty_dot_breaks,
@@ -1256,8 +1275,4 @@ ggsave(
   height = 210,
   units = "mm"
 )
-# 
-
-
-
 
