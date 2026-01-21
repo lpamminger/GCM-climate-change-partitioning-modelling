@@ -120,7 +120,35 @@ all_plotting_data <- rbind(hist_nat_plotting_data, obs_CO2_off_plotting_data, ob
 
 ## plot and save ===============================================================
 
-# copy streamflow timeseries supplementary plots from RQ2
+### split catchments ###########################################################
+handpicked_catchments <- c("606195", "227210", "405240", "319204", "138004B")
+
+supp_catchments <- hist_nat_plotting_data |> 
+  filter(!gauge %in% handpicked_catchments) |> 
+  pull(gauge) |> 
+  unique()
+
+chunk <- 7
+n <- length(supp_catchments)
+split_group <- rep(rep(1:ceiling(n/chunk), each = chunk))[1:n]
+split_tibble <- tibble(
+  "gauge" = supp_catchments,
+  "split" = split_group
+)
+
+supp_data <- all_plotting_data |> 
+  right_join(
+    split_tibble,
+    by = join_by(gauge)
+  )
+
+# converting table to list by groups https://stackoverflow.com/questions/7060272/split-up-a-dataframe-by-number-of-rows
+chunked_supp_data <- supp_data |> 
+  group_by(split) |> 
+  group_map(~ .x)
+
+
+### Make facet labels for plots ################################################
 make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, label_type = LETTERS, hjust = 0, vjust = 0) {
   # The embrace operator does not work correctly in summarise i.e., max({{ y_axis_column }})
   # Link: https://forum.posit.co/t/embrace-operator-for-tidy-selection-vs-data-masking/173084
@@ -132,6 +160,7 @@ make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, 
   data |>
     summarise(
       ylab = max(!!col),
+      min_ylab = min(!!col),
       .by = {{ facet_column }}
     ) |>
     # Add xlab - constant x-axis
@@ -148,7 +177,12 @@ make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, 
     ) |>
     # set zero values to -1 the adjustment works
     mutate(
-      ylab = if_else(ylab == 0, -1, ylab)
+      range_ylab = abs(ylab - min_ylab),
+      ylab = case_when(
+        (range_ylab > 100) & near(ylab, 0, 10) ~ -10,
+        (range_ylab < 100) & near(ylab, 0, 10) ~ -1,
+        .default = ylab
+      ) 
     ) |>
     # apply hjust and vjust
     mutate(
@@ -158,90 +192,167 @@ make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, 
 }
 
 
+#### Plot function #############################################################
+
+timeseries_plot <- function(data, envelope_data) {
+  
+  # Pull gauges for envelope data
+  gauges <- data |> pull(gauge) |> unique()
+  
+  # create facet_labels tibble
+  facet_labels <- make_facet_labels(
+    data = data,
+    facet_column = "gauge",
+    x_axis_column = "year",
+    y_axis_column = "median_GCM_realspace_streamflow",
+    label_type = LETTERS[1:length(gauges)],
+    hjust = 0.0005,
+    vjust = -0.05
+  )
+  
+  data |>
+    ggplot(aes(x = year, y = median_GCM_realspace_streamflow, shape = type, colour = type)) +
+    geom_ribbon(
+      aes(x = year, ymin = min_GCM_realspace_streamflow, ymax = max_GCM_realspace_streamflow),
+      alpha = 0.2,
+      inherit.aes = FALSE,
+      data = envelope_data |> filter(gauge %in% gauges),
+      fill = "#7570b3"
+    ) +
+    geom_text(
+      mapping = aes(x = xlab, y = ylab, label = label_name),
+      data = facet_labels,
+      inherit.aes = FALSE,
+      fontface = "bold",
+      size = 10,
+      size.unit = "pt"
+    ) +
+    geom_line() +
+    geom_point() +
+    theme_bw() +
+    scale_shape_manual(
+      labels = c(
+        "With the Impact of Climate Change",
+        "Only Climate Change Rainfall Shifts",
+        "Without the Impact of Climate Change"
+      ),
+      values = c(15, 16, 17),
+      drop = FALSE
+    ) +
+    scale_colour_brewer(
+      palette = "Dark2",
+      labels = c(
+        "With the Impact of Climate Change",
+        "Only Climate Change Rainfall Shifts",
+        "Without the Impact of Climate Change"
+      )
+    ) +
+    labs(
+      x = "Time (Year)",
+      y = "Streamflow (mm)",
+      colour = NULL,
+      shape = NULL
+    ) +
+    scale_x_continuous(expand = c(0.01, 0.01)) +
+    theme(
+      legend.position = "bottom",
+      text = element_text(family = "sans", size = 9), # default fonts are serif, sans and mono, text size is in pt
+      strip.background = element_blank(), # remove facet_strip gauge numbers
+      strip.text = element_blank() # remove facet_strip gauge numbers
+    ) +
+    facet_wrap(~gauge, ncol = 1, scale = "free_y")
+}
 
 
 
-
-handpicked_catchments <- c("606195", "227210", "405240", "319204", "138004B")
-
-test_plotting_data <- all_plotting_data |>
+### Main figure plot ###########################################################
+handpicked_plotting_data <- all_plotting_data |>
   filter(gauge %in% handpicked_catchments)
 
-facet_labels <- make_facet_labels(
-  data = test_plotting_data,
-  facet_column = "gauge",
-  x_axis_column = "year",
-  y_axis_column = "median_GCM_realspace_streamflow",
-  label_type = LETTERS,
-  hjust = 0.0005,
-  vjust = -0.05
+
+main_timeseries_plot <- timeseries_plot(
+  data = handpicked_plotting_data, 
+  envelope_data = hist_nat_plotting_data
 )
-
-
-plot <- test_plotting_data |>
-  ggplot(aes(x = year, y = median_GCM_realspace_streamflow, shape = type, colour = type)) +
-  geom_ribbon(
-    aes(x = year, ymin = min_GCM_realspace_streamflow, ymax = max_GCM_realspace_streamflow),
-    alpha = 0.2,
-    inherit.aes = FALSE,
-    data = hist_nat_plotting_data |> filter(gauge %in% handpicked_catchments),
-    fill = "#7570b3"
-  ) +
-  geom_text(
-    mapping = aes(x = xlab, y = ylab, label = label_name),
-    data = facet_labels,
-    inherit.aes = FALSE,
-    fontface = "bold",
-    size = 10,
-    size.unit = "pt"
-  ) +
-  geom_line() +
-  geom_point() +
-  theme_bw() +
-  scale_shape_manual(
-    labels = c(
-      "With the Impact of Climate Change",
-      "Only Climate Change Rainfall Shifts",
-      "Without the Impact of Climate Change"
-    ),
-    values = c(15, 16, 17),
-    drop = FALSE
-  ) +
-  scale_colour_brewer(
-    palette = "Dark2",
-    labels = c(
-      "With the Impact of Climate Change",
-      "Only Climate Change Rainfall Shifts",
-      "Without the Impact of Climate Change"
-    )
-  ) +
-  labs(
-    x = "Time (Year)",
-    y = "Streamflow (mm)",
-    colour = NULL,
-    shape = NULL
-  ) +
-  scale_x_continuous(expand = c(0.01, 0.01)) +
-  theme(
-    legend.position = "bottom",
-    text = element_text(family = "sans", size = 9), # default fonts are serif, sans and mono, text size is in pt
-    strip.background = element_blank(), # remove facet_strip gauge numbers
-    strip.text = element_blank() # remove facet_strip gauge numbers
-  ) +
-  facet_wrap(~gauge, ncol = 1, scale = "free_y")
-
-
-plot
 
 ggsave(
   file = "handpicked_timeseries.pdf",
   path = "./Figures/Main",
-  plot = plot,
+  plot = main_timeseries_plot,
   device = "pdf",
   width = 183,
   height = 197,
   units = "mm"
 )
+
+### Supplemental plots #########################################################
+supp_timeseries_plots <- map(
+  .x = chunked_supp_data,
+  .f = timeseries_plot,
+  envelope_data = hist_nat_plotting_data
+)
+
+save_supp_plots <- function(ggplot_object, identifier, filename) {
+  ggsave(
+    file = paste0(filename, "_", identifier, ".pdf"),
+    path = "./Figures/Supplementary",
+    plot = ggplot_object,
+    device = "pdf",
+    width = 183,
+    height = 197,
+    units = "mm"
+  )
+}
+
+
+create_caption <- function(identifier, chunked_supp_data) {
+  
+  gauge <- chunked_supp_data[[identifier]] |> pull(gauge) |> unique() |> sort()
+  abc <- LETTERS[1:length(gauge)]
+  gauge_abc <- paste0(gauge, " (", abc, ")")
+  # concatenate everything but last value
+  start_gauge_abc <- paste0(gauge_abc[1:(length(gauge_abc) - 2)], ", ", collapse = "")
+  end_gauge_abc <- paste0(gauge_abc[(length(gauge_abc) - 1)], " and ", gauge_abc[length(gauge_abc)], ".")
+  gauge_text <- paste(c(start_gauge_abc, end_gauge_abc), collapse = "")
+  
+  cat("\\begin{figure}") 
+  cat("\n")
+  cat("\t\\centering")
+  cat("\n")
+  cat(paste0("\t\\includegraphics[width=\\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_", identifier, ".pdf}"))
+  cat("\t\n")
+  # The line below must change
+  cat(paste0("\t\\caption{\\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges ", gauge_text, "} Same as Figure~\\ref{fig:chapt_5_streamflow_timeseries}.}"))
+  cat("\n")
+  # The line below must change
+  cat(paste0("\t\\label{fig:chapt_5_supp_streamflow_timeseries_", identifier, "}")) 
+  cat("\n")
+  cat("\\end{figure}")
+  cat("\n")
+  cat("\n")
+  
+}
+
+
+iwalk(
+  .x = supp_timeseries_plots,
+  .f = save_supp_plots,
+  filename = "chapt_5_supp_streamflow_timeseries"
+)
+
+
+sink(file = "Figures/Supplementary/streamflow_time_captions_supp.txt") # filename must change
+walk(
+  .x = seq(from = 1, to = length(chunked_supp_data)),
+  .f = create_caption,
+  chunked_supp_data = chunked_supp_data
+)
+sink()
+
+
+
+
+
 
 
 # Decompose of rainfall and CO2 partitioning on streamflow ---------------------
@@ -758,6 +869,20 @@ uncertainty_decade_specific_decomposed_impacts |>
   pull(relative_partitioning_effect) |>
   mean()
 
+### Find the contributions in 2014
+uncertainty_decade_specific_decomposed_impacts |> 
+  filter(decade == 2) |> 
+  summarise(
+    sum_total_effect = sum(total_effect),
+    sum_rainfall_effect = sum(rainfall_effect),
+    sum_partitioning_effect = sum(partitioning_effect)
+  ) |> 
+  mutate(
+    percent_partitioning_effect = (sum_partitioning_effect / sum_total_effect) * 100,
+    percent_rainfall_effect = (sum_rainfall_effect / sum_total_effect) * 100
+  )
+  
+  
 # Plot total, rainfall and partitioning effect timeseries ----------------------
 ## Total effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`
 ## Rainfall effect = `Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`
@@ -778,7 +903,172 @@ decomposed_timeseries_data <- decomposing_impacts |>
   ) |>
   mutate(
     streamflow = -1 * streamflow # multiple by negative 1 to get loss and gain correct
+  ) |> 
+  mutate(
+    effect = case_when(
+      effect == "partitioning_effect" ~ "Rainfall-Partitioning Effect",
+      effect == "rainfall_effect" ~ "Rainfall Effect",
+      effect == "total_effect" ~ "Total Effect"
+    )
   )
+
+
+## plot and save =============================================================== 
+
+### split catchments ###########################################################
+supp_difference_data <- decomposed_timeseries_data |> 
+  right_join(
+    split_tibble,
+    by = join_by(gauge)
+  )
+
+# converting table to list by groups https://stackoverflow.com/questions/7060272/split-up-a-dataframe-by-number-of-rows
+chunked_difference_supp_data <- supp_difference_data |> 
+  group_by(split) |> 
+  group_map(~ .x)
+
+
+
+#### Plot function #############################################################
+
+timeseries_difference_plot <- function(data) {
+  
+  # Pull gauges for envelope data
+  gauges <- data |> pull(gauge) |> unique()
+  
+  # create facet_labels tibble
+  facet_labels <- make_facet_labels(
+    data = data,
+    facet_column = "gauge",
+    x_axis_column = "year",
+    y_axis_column = "streamflow",
+    label_type = LETTERS[1:length(gauges)],
+    hjust = 0.0005,
+    vjust = -0.2
+  )
+  
+  data |> 
+  ggplot(aes(x = year, y = streamflow, shape = effect, colour = effect)) +
+    geom_line() +
+    geom_point() +
+    # geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_text(
+      mapping = aes(x = xlab, y = ylab, label = label_name),
+      data = facet_labels,
+      inherit.aes = FALSE,
+      fontface = "bold",
+      size = 10,
+      size.unit = "pt"
+    ) +
+    facet_wrap(~gauge, scales = "free_y") +
+    scale_colour_brewer(palette = "Dark2") +
+    theme_bw() +
+    labs(
+      y = "Climate Change Induced Shift in Streamflow (mm)",
+      x = "Year",
+      colour = NULL,
+      shape = NULL
+    ) +
+    scale_x_continuous(expand = c(0.01, 0.01)) +
+    theme(
+      legend.position = "bottom",
+      text = element_text(family = "sans", size = 9), # default fonts are serif, sans and mono, text size is in pt
+      strip.background = element_blank(), # remove facet_strip gauge numbers
+      strip.text = element_blank() # remove facet_strip gauge numbers
+    ) +
+    facet_wrap(~gauge, ncol = 1, scale = "free_y")
+}
+
+
+
+### Main figure plot ###########################################################
+main_decomposed_timeseries_plot <- decomposed_timeseries_data |>
+  filter(gauge %in% handpicked_catchments) |> 
+  timeseries_difference_plot()
+
+
+ggsave(
+  file = "handpicked_climate_change_effect_timeseries.pdf",
+  path = "./Figures/Main",
+  plot = main_decomposed_timeseries_plot,
+  device = "pdf",
+  width = 183,
+  height = 197,
+  units = "mm"
+)
+
+
+### Supplemental plots #########################################################
+supp_decomposed_timeseries_plots <- map(
+  .x = chunked_difference_supp_data,
+  .f = timeseries_difference_plot
+)
+
+
+decomposed_create_caption <- function(identifier, chunked_supp_data) {
+  
+  gauge <- chunked_supp_data[[identifier]] |> pull(gauge) |> unique() |> sort()
+  abc <- LETTERS[1:length(gauge)]
+  gauge_abc <- paste0(gauge, " (", abc, ")")
+  # concatenate everything but last value
+  start_gauge_abc <- paste0(gauge_abc[1:(length(gauge_abc) - 2)], ", ", collapse = "")
+  end_gauge_abc <- paste0(gauge_abc[(length(gauge_abc) - 1)], " and ", gauge_abc[length(gauge_abc)], ".")
+  gauge_text <- paste(c(start_gauge_abc, end_gauge_abc), collapse = "")
+  
+  cat("\\begin{figure}") 
+  cat("\n")
+  cat("\t\\centering")
+  cat("\n")
+  cat(paste0("\t\\includegraphics[width=\\textwidth]{Figures/Chapter 5/chapt_5_supp_climate_change_effect_timeseries_", identifier, ".pdf}"))
+  cat("\t\n")
+  # The line below must change
+  cat(paste0("\t\\caption{\\textbf{Change in streamflow over time due to climate change induced changes in rainfall and rainfall-partitioning for gauges ", gauge_text, "} Same as Figure~\\ref{fig:chapt_5_cc_effect_timeseries}.}"))
+  cat("\n")
+  # The line below must change
+  cat(paste0("\t\\label{fig:chapt_5_supp_climate_change_effect_timeseries_", identifier, "}")) 
+  cat("\n")
+  cat("\\end{figure}")
+  cat("\n")
+  cat("\n")
+  
+}
+
+
+iwalk(
+  .x = supp_decomposed_timeseries_plots,
+  .f = save_supp_plots,
+  filename = "chapt_5_supp_climate_change_effect_timeseries"
+)
+
+
+sink(file = "Figures/Supplementary/decomposed_streamflow_time_captions_supp.txt") # filename must change
+walk(
+  .x = seq(from = 1, to = length(chunked_difference_supp_data)),
+  .f = decomposed_create_caption,
+  chunked_supp_data = chunked_difference_supp_data
+)
+sink()
+
+
+
+
+
+### change plotting function
+### change caption function
+
+###
+supp_data <- all_plotting_data |> 
+  right_join(
+    split_tibble,
+    by = join_by(gauge)
+  )
+
+# converting table to list by groups https://stackoverflow.com/questions/7060272/split-up-a-dataframe-by-number-of-rows
+chunked_supp_data <- supp_data |> 
+  group_by(split) |> 
+  group_map(~ .x)
+
+
 
 
 ## giant timeseries plot =======================================================
@@ -793,13 +1083,6 @@ facet_label_effect <- make_facet_labels(
 )
 
 plot_decomposed_timeseries <- decomposed_timeseries_data |>
-  mutate(
-    effect = case_when(
-      effect == "partitioning_effect" ~ "Rainfall-Partitioning Effect",
-      effect == "rainfall_effect" ~ "Rainfall Effect",
-      effect == "total_effect" ~ "Total Effect"
-    )
-  ) |>
   filter(gauge %in% handpicked_catchments) |>
   ggplot(aes(x = year, y = streamflow, shape = effect, colour = effect)) +
   geom_line() +
@@ -835,15 +1118,16 @@ plot_decomposed_timeseries <- decomposed_timeseries_data |>
 plot_decomposed_timeseries
 
 
-ggsave(
-  file = "handpicked_climate_change_effect_timeseries.pdf",
-  path = "./Figures/Main",
-  plot = plot_decomposed_timeseries,
-  device = "pdf",
-  width = 183,
-  height = 197,
-  units = "mm"
-)
+
+
+
+
+
+
+
+
+
+
 
 
 # Map of total impact ----------------------------------------------------------

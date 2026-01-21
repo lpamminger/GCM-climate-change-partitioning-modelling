@@ -1,0 +1,77 @@
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_1.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 204036 (A), 208004 (B), 208005 (C), 210017 (D), 210022 (E), 215002 (F) and 216002 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_1}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_2.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 218005 (A), 221208 (B), 224213 (C), 226204 (D), 226205 (E), 227205 (F) and 227213 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_2}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_3.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 230205 (A), 230209 (B), 230210 (C), 231211 (D), 231213 (E), 234200 (F) and 234201 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_3}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_4.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 235204 (A), 235205 (B), 235219 (C), 235234 (D), 236213 (E), 236216 (F) and 238204 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_4}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_5.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 238229 (A), 238230 (B), 238235 (C), 302200 (D), 303203 (E), 305202 (F) and 314207 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_5}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_6.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 317200 (A), 401009 (B), 401210 (C), 401217 (D), 405212 (E), 405228 (F) and 405230 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_6}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_7.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 405234 (A), 405237 (B), 405238 (C), 405248 (D), 405251 (E), 405274 (F) and 406208 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_7}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_8.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 406213 (A), 406214 (B), 406226 (C), 406235 (D), 407214 (E), 407217 (F) and 407246 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_8}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_9.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 408202 (A), 410156 (B), 410713 (C), 411003 (D), 415223 (E), 603003 (F) and 603005 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_9}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_10.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 603007 (A), 603190 (B), 606001 (C), 606185 (D), 608151 (E), 610008 (F) and 613002 (G).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_10}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\textwidth]{Figures/Chapter 5/chapt_5_supp_streamflow_timeseries_11.pdf}	
+	\caption{\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges 613146 (A), 614044 (B), 616041 (C), 616178 (D), 701002 (E) and A2390523 (F).} Same as Figure~\ref{fig:chapt_5_streamflow_timeseries}.}
+	\label{fig:chapt_5_supp_streamflow_timeseries_11}
+\end{figure}
+
