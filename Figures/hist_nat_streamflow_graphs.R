@@ -1560,3 +1560,128 @@ ggsave(
   units = "mm"
 )
 
+
+
+# Ukkola comparison ------------------------------------------------------------
+# Calculate the streamflow reduction of all catchment from only change in 
+# rainfall-partitioning between 1982-2010
+
+## Ukkola analysis period is 1982-2010 - filter ================================
+ukkola_period <- seq(from = 1982, to = 2010, by = 1)
+
+## Decompose impacts per gauge based on ukkola period ==========================
+ukkola_specific_decomposed_impacts <- decomposing_impacts |>
+  filter(year %in% ukkola_period) |>
+  summarise(
+    sum_counterfactual_hist_nat = sum(`Counterfactual - Hist Nat Precipitation`),
+    sum_counterfactual_obs = sum(`Counterfactual - Observed Precipitation`),
+    sum_CO2_obs = sum(`CO2 Model - Observed Precipitation`),
+    .by = c(gauge)
+  ) |>
+  # decompose - take abs two catchments CO2 increases streamflow
+  mutate(
+    total_effect = abs(sum_counterfactual_hist_nat - sum_CO2_obs),
+    rainfall_effect = abs(sum_counterfactual_hist_nat - sum_counterfactual_obs),
+    partitioning_effect = abs(sum_counterfactual_obs - sum_CO2_obs)
+  ) |>
+  # relative impact to total - need if else when CO2 adds streamflow
+  mutate(
+    relative_rainfall_effect = if_else(total_effect > rainfall_effect, rainfall_effect / total_effect, total_effect / rainfall_effect),
+    relative_partitioning_effect = if_else(total_effect > partitioning_effect, partitioning_effect / total_effect, total_effect / partitioning_effect)
+  ) |> # join lat lon and state data
+  left_join(
+    lat_lon_data,
+    by = join_by(gauge)
+  )
+
+
+## Final total effect using ukkola period ======================================
+ukkola_total_effect_data <- ukkola_specific_decomposed_impacts |>
+  mutate(
+    total_effect_CC_percent = if_else(
+      total_effect < partitioning_effect,
+      total_effect / sum_counterfactual_hist_nat,
+      -total_effect / sum_counterfactual_hist_nat
+    ) #* 100 - label_percent() does this
+  ) |>
+  # use total effect and rainfall effect to estimate components
+  mutate(
+    rainfall_effect_CC_percent = relative_rainfall_effect * total_effect_CC_percent,
+    partitioning_effect_CC_percent = (1 - relative_rainfall_effect) * total_effect_CC_percent
+  )
+
+## Characterise by aridity =====================================================
+### Annual mean P / annual mean PET
+areal_potential_evap_SILO_daily <- read_csv(
+  "Previous/Data/et_morton_wet_SILO.csv",
+  show_col_types = FALSE
+)
+
+rainfall_data <- read_csv(
+  "Previous/Data/with_NA_yearly_data_CAMELS.csv",
+  show_col_types = FALSE
+) |> 
+  select(year, gauge, p_mm) |> 
+  filter(gauge %in% high_evidence_ratio_gauges) |> 
+  summarise(
+    mean_annual_precip = mean(p_mm),
+    .by = gauge
+  )
+
+aridity_ratio <- areal_potential_evap_SILO_daily |>
+  pivot_longer(
+    cols = !c(year, month, day),
+    names_to = "gauge",
+    values_to = "APET_mm"
+  ) |>
+  # only include gauges we are interested in
+  filter(gauge %in% high_evidence_ratio_gauges) |>
+  # sum daily PET to get annual - check for missing data
+  summarise(
+    annual_APET_mm = sum(APET_mm),
+    n = n(),
+    .by = c(year, gauge)
+  ) |> 
+  # find mean annual PET
+  summarise(
+    mean_annual_PET = mean(annual_APET_mm),
+    .by = gauge
+  ) |> 
+  left_join(
+    rainfall_data,
+    by = join_by(gauge)
+  ) |> 
+  mutate(
+    aridity = mean_annual_precip / mean_annual_PET
+  ) |> 
+  # UNEP's classification with Ukkola modification (see supp materials)
+  # modification is sub-humid = 0.5 to 1
+  # wet > 1
+  mutate(
+    aridity_classification = case_when(
+      between(aridity, 0.2, 0.5) ~ "semi-arid",
+      between(aridity, 0.5, 1) ~ "sub-humid",
+      between(aridity, 0.05, 0.2) ~ "arid",
+      aridity > 1 ~ "wet",
+      .default = NA
+    )
+  )
+
+
+
+## Compare partitioning percentage to Ukkola's results =========================
+ukkola_all_data <- ukkola_total_effect_data |> 
+  left_join(
+    aridity_ratio,
+    by = join_by(gauge)
+  ) 
+
+ukkola_all_data |> 
+  summarise(
+    mean_partitioning_percentage_impact = mean(partitioning_effect_CC_percent),
+    n = n(),
+    sd_partitioning_percentage_impact = sd(partitioning_effect_CC_percent),
+    .by = aridity_classification
+  )
+
+
