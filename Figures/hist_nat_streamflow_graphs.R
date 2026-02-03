@@ -466,7 +466,8 @@ uncertainty_decade_specific_decomposed_impacts <- decade_specific_decomposed_imp
   ) |>
   mutate(
     total_effect = abs(sum_counterfactual_hist_nat - sum_CO2_obs),
-    partitioning_effect = abs(sum_counterfactual_obs - sum_CO2_obs)
+    partitioning_effect = abs(sum_counterfactual_obs - sum_CO2_obs),
+    rainfall_effect = abs(sum_counterfactual_hist_nat - sum_counterfactual_obs)
   ) |> # get relative effect for partitioning only to avoid double up of uncertaities
   mutate(
     relative_partitioning_effect = if_else(total_effect > partitioning_effect, partitioning_effect / total_effect, total_effect / partitioning_effect),
@@ -483,7 +484,7 @@ uncertainty_decade_specific_decomposed_impacts <- decade_specific_decomposed_imp
   ) |>
   # get IQR as a measure of uncertainty
   summarise(
-    range_relative_rainfall_effect = IQR(relative_partitioning_effect), # max(range(relative_rainfall_effect)) - min(range(relative_rainfall_effect)),
+    range_relative_rainfall_effect = IQR(relative_rainfall_effect), # max(range(relative_rainfall_effect)) - min(range(relative_rainfall_effect)),
     range_total_CC_percentage_effect = IQR(total_effect_CC_percent),
     .by = c(gauge, decade)
   ) |> # 4. join uncertainty values to existing values
@@ -1678,10 +1679,110 @@ ukkola_all_data <- ukkola_total_effect_data |>
 
 ukkola_all_data |> 
   summarise(
-    mean_partitioning_percentage_impact = mean(partitioning_effect_CC_percent),
-    n = n(),
+    mean_partitioning_percentage_impact = mean(partitioning_effect_CC_percent) * 100,
+    number_of_catchments = n(),
     sd_partitioning_percentage_impact = sd(partitioning_effect_CC_percent),
     .by = aridity_classification
   )
 
 
+
+# Total impact of climate change on streamflow using only rainfall -------------
+
+## Arguments for test_map_plot 
+
+# WRONG - NEED TO CALCULATE range_total_CC_percentage_effect for rainfall only change
+# Would the uncertainty change?
+
+total_effect_data |>
+  pull(range_total_CC_percentage_effect) |> # this is wrong here
+  range()
+uncertainty_dot_limits <- c(1.6, 37) # HARD CODED
+uncertainty_dot_breaks <- seq(from = 1.6, to = 37, length.out = 7)
+
+total_effect_data |>
+  pull(rainfall_effect_CC_percent) |>
+  range()
+
+main_variable_limits <- c(-0.56, 0.03) # HARD CODED
+
+main_variable_breaks <- sort(c(seq(from = -0.56, to = 0, length.out = 5), 0.03))
+
+rescale_colourbar <- main_variable_breaks |>
+  scales::rescale(to = c(0, 1))
+
+# Need to adjust rescale_colourbar. The zero values is too blue it should be on the transition
+# edit manually - make the zero on the edge of yellow and blue. Make numbers bigger to do this
+rescale_colourbar <- c(0.0, 0.45, 0.75, 0.97, 0.99, 1.0)
+
+
+
+## Plots
+total_rainfall_impact_1990 <- test_map_plot(
+  plotting_variable = rainfall_effect_CC_percent,
+  size_variable = range_total_CC_percentage_effect, # uncertainty needs changing
+  data = total_effect_data |> filter(decade == 1),
+  main_variable_limits = main_variable_limits,
+  main_variable_breaks = main_variable_breaks,
+  rescale_colourbar = rescale_colourbar,
+  uncertainty_limits = uncertainty_dot_limits,
+  uncertainty_breaks = uncertainty_dot_breaks,
+  colour_palette = "RdYlBu",
+  legend_title = "Total Change in Streamflow Due to Climate Change Shifts in Rainfall"
+) +
+  geom_text(
+    data = figure_label_1990,
+    aes(x = lon, y = lat, label = label_name),
+    fontface = "bold",
+    size = 10,
+    size.unit = "pt"
+  ) +
+  geom_text(
+    data = decade_label_1990,
+    aes(x = lon, y = lat, label = label_name),
+    size = 10,
+    size.unit = "pt"
+  )
+
+
+total_rainfall_impact_2012 <- test_map_plot(
+  plotting_variable = rainfall_effect_CC_percent,
+  size_variable = range_total_CC_percentage_effect,
+  data = total_effect_data |> filter(decade == 2),
+  main_variable_limits = main_variable_limits,
+  main_variable_breaks = main_variable_breaks,
+  rescale_colourbar = rescale_colourbar,
+  uncertainty_limits = uncertainty_dot_limits,
+  uncertainty_breaks = uncertainty_dot_breaks,
+  colour_palette = "RdYlBu",
+  legend_title = "Total Change in Streamflow Due to Climate Change Shifts in Rainfall"
+) +
+  geom_text(
+    data = figure_label_2012,
+    aes(x = lon, y = lat, label = label_name),
+    fontface = "bold",
+    size = 10,
+    size.unit = "pt"
+  ) +
+  geom_text(
+    data = decade_label_2012,
+    aes(x = lon, y = lat, label = label_name),
+    size = 10,
+    size.unit = "pt"
+  )
+
+
+total_rainfall_impact_of_CC_on_streamflow_plot <- (total_rainfall_impact_1990 | total_rainfall_impact_2012) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+
+ggsave(
+  file = "map_total_rainfall_impact_of_CC_on_streamflow.pdf",
+  path = "./Figures/Main",
+  plot = total_rainfall_impact_of_CC_on_streamflow_plot,
+  device = "pdf",
+  width = 297,
+  height = 210,
+  units = "mm"
+)
