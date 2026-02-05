@@ -480,12 +480,14 @@ uncertainty_decade_specific_decomposed_impacts <- decade_specific_decomposed_imp
       total_effect < partitioning_effect,
       total_effect / sum_counterfactual_hist_nat,
       -total_effect / sum_counterfactual_hist_nat
-    ) * 100
+    ) * 100,
+    rainfall_total_effect_CC_percent = total_effect_CC_percent * relative_rainfall_effect
   ) |>
   # get IQR as a measure of uncertainty
   summarise(
     range_relative_rainfall_effect = IQR(relative_rainfall_effect), # max(range(relative_rainfall_effect)) - min(range(relative_rainfall_effect)),
     range_total_CC_percentage_effect = IQR(total_effect_CC_percent),
+    range_total_rainfall_CC_percentage_effect = IQR(rainfall_total_effect_CC_percent),
     .by = c(gauge, decade)
   ) |> # 4. join uncertainty values to existing values
   right_join(
@@ -1161,6 +1163,7 @@ total_effect_data <- uncertainty_decade_specific_decomposed_impacts |>
   )
 
 
+
 ## Statistics for the results ==================================================
 total_effect_data |>
   mutate(total_effect_CC_percent = total_effect_CC_percent * 100) |>
@@ -1691,14 +1694,13 @@ ukkola_all_data |>
 
 ## Arguments for test_map_plot 
 
-# WRONG - NEED TO CALCULATE range_total_CC_percentage_effect for rainfall only change
-# Would the uncertainty change?
 
 total_effect_data |>
-  pull(range_total_CC_percentage_effect) |> # this is wrong here
+  pull(range_total_rainfall_CC_percentage_effect) |> # this is wrong here
   range()
-uncertainty_dot_limits <- c(1.6, 37) # HARD CODED
-uncertainty_dot_breaks <- seq(from = 1.6, to = 37, length.out = 7)
+uncertainty_dot_limits <- c(2.4, 22) # HARD CODED
+uncertainty_dot_breaks <- seq(from = 2.4, to = 22, length.out = 7) |> 
+  round(digits = 1)
 
 total_effect_data |>
   pull(rainfall_effect_CC_percent) |>
@@ -1713,7 +1715,7 @@ rescale_colourbar <- main_variable_breaks |>
 
 # Need to adjust rescale_colourbar. The zero values is too blue it should be on the transition
 # edit manually - make the zero on the edge of yellow and blue. Make numbers bigger to do this
-rescale_colourbar <- c(0.0, 0.45, 0.75, 0.97, 0.99, 1.0)
+rescale_colourbar <- c(0.0, 0.45, 0.75, 0.97, 0.99, 1.0) # n - 1
 
 
 
@@ -1786,3 +1788,25 @@ ggsave(
   height = 210,
   units = "mm"
 )
+
+
+## Statistics for the results ==================================================
+total_effect_data |>
+  mutate(rainfall_effect_CC_percent = rainfall_effect_CC_percent * 100) |>
+  summarise(
+    mean = mean(rainfall_effect_CC_percent),
+    sd = sd(rainfall_effect_CC_percent),
+    mean_uncertainty = mean(range_total_rainfall_CC_percentage_effect),
+    .by = decade
+  )
+
+
+total_effect_data |>
+  mutate(rainfall_effect_CC_percent = rainfall_effect_CC_percent * 100) |>
+  summarise(
+    mean = mean(rainfall_effect_CC_percent),
+    sd = sd(rainfall_effect_CC_percent),
+    mean_uncertainty = mean(range_total_rainfall_CC_percentage_effect),
+    .by = c(decade, state)
+  )
+  arrange(state, decade)
