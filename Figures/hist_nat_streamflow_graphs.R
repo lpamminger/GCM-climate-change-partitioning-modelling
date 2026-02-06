@@ -3,7 +3,7 @@
 
 # Import libraries -------------------------------------------------------------
 pacman::p_load(tidyverse, truncnorm, sloop, arrow, furrr, ozmaps, sf, ggmagnify, ggplot2, patchwork)
-# scatterpie
+
 
 # Import functions -------------------------------------------------------------
 source("Previous/Functions/utility.R")
@@ -892,7 +892,59 @@ uncertainty_decade_specific_decomposed_impacts |>
 ## Partitioning effect = `Counterfactual - Observed Precipitation` - `CO2 Model - Observed Precipitation`
 
 
-decomposed_timeseries_data <- decomposing_impacts |>
+
+## Calculate uncertainty 
+uncertainty_for_decomposed_timeseries_data <- hist_nat_plotting_data |> 
+  select(!c(median_GCM_realspace_streamflow, type)) |> 
+  rename(
+    `MIN Counterfactual - Hist Nat Precipitation` = min_GCM_realspace_streamflow,
+    `MAX Counterfactual - Hist Nat Precipitation` = max_GCM_realspace_streamflow
+  ) |> 
+  right_join(
+    decomposing_impacts,
+    by = join_by(year, gauge)
+  ) |>
+  mutate(
+    upper_total_effect = `MAX Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`,
+    upper_rainfall_effect = `MAX Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`,
+    lower_total_effect = `MIN Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`,
+    lower_rainfall_effect = `MIN Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`
+  ) |> 
+  select(
+    year,
+    gauge,
+    upper_total_effect,
+    lower_total_effect,
+    upper_rainfall_effect,
+    lower_rainfall_effect
+  ) 
+
+### Two-step it - I don't know how to do this a in single step
+total_effect_ribbon_bounds <- uncertainty_for_decomposed_timeseries_data |> 
+  select(year, gauge, upper_total_effect, lower_total_effect) |> 
+  add_column(
+    effect = "Total Effect"
+  ) |> 
+  rename(
+    upper_bound = upper_total_effect,
+    lower_bound = lower_total_effect
+  )
+
+rainfall_effect_ribbon_bounds <- uncertainty_for_decomposed_timeseries_data |> 
+  select(year, gauge, upper_rainfall_effect, lower_rainfall_effect) |> 
+  add_column(
+    effect = "Rainfall Effect"
+  ) |> 
+  rename(
+    upper_bound = upper_rainfall_effect,
+    lower_bound = lower_rainfall_effect
+  )
+
+ribbon_bounds <- rbind(total_effect_ribbon_bounds, rainfall_effect_ribbon_bounds)
+
+
+### Join uncertainty to plotting dataset
+decomposed_timeseries_data <- decomposing_impacts |> 
   # decompose using formula above
   mutate(
     total_effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`,
@@ -905,16 +957,24 @@ decomposed_timeseries_data <- decomposing_impacts |>
     values_to = "streamflow"
   ) |>
   mutate(
-    streamflow = -1 * streamflow # multiple by negative 1 to get loss and gain correct
-  ) |> 
-  mutate(
     effect = case_when(
       effect == "partitioning_effect" ~ "Rainfall-Partitioning Effect",
       effect == "rainfall_effect" ~ "Rainfall Effect",
       effect == "total_effect" ~ "Total Effect"
     )
-  )
-
+  ) |> 
+  select(year, gauge, effect, streamflow) |>  
+  # add uncertainty bounds
+  left_join(
+    ribbon_bounds,
+    by = join_by(year, gauge, effect)
+  ) |> 
+  # multiple by negative 1 to get loss and gain correct
+  mutate(
+    streamflow = -1 * streamflow,
+    upper_bound = -1 * upper_bound,
+    lower_bound = -1 * lower_bound
+  ) 
 
 ## plot and save =============================================================== 
 
@@ -952,6 +1012,12 @@ timeseries_difference_plot <- function(data) {
   
   data |> 
   ggplot(aes(x = year, y = streamflow, shape = effect, colour = effect)) +
+    geom_ribbon(
+      aes(ymax = upper_bound, ymin = lower_bound, fill = effect), 
+      alpha = 0.2, 
+      colour = NA,
+      na.rm = FALSE
+      ) +
     geom_line() +
     geom_point() +
     # geom_hline(yintercept = 0, linetype = "dashed") +
@@ -965,12 +1031,14 @@ timeseries_difference_plot <- function(data) {
     ) +
     facet_wrap(~gauge, scales = "free_y") +
     scale_colour_brewer(palette = "Dark2") +
+    scale_fill_brewer(palette = "Dark2") +
     theme_bw() +
     labs(
       y = "Climate Change Induced Shift in Streamflow (mm)",
       x = "Year",
       colour = NULL,
-      shape = NULL
+      shape = NULL,
+      fill = NULL
     ) +
     scale_x_continuous(expand = c(0.01, 0.01)) +
     theme(
