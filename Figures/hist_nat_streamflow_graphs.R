@@ -768,8 +768,8 @@ uncertainty_decade_specific_decomposed_impacts |>
 
 
 # hard-code limits and range
-uncertainty_dot_limits <- c(0, 0.44)
-uncertainty_dot_breaks <- c(0.05, 0.10, 0.15, 0.20, 0.25, 0.3, 0.35, 0.4)
+uncertainty_dot_limits <- c(0, 0.43)
+uncertainty_dot_breaks <- c(0.10, 0.20, 0.3, 0.4)
 
 ## Plot 1990-1999 ==============================================================
 figure_label_1990 <- tribble(
@@ -1124,80 +1124,6 @@ sink()
 
 
 
-### change plotting function
-### change caption function
-
-###
-supp_data <- all_plotting_data |> 
-  right_join(
-    split_tibble,
-    by = join_by(gauge)
-  )
-
-# converting table to list by groups https://stackoverflow.com/questions/7060272/split-up-a-dataframe-by-number-of-rows
-chunked_supp_data <- supp_data |> 
-  group_by(split) |> 
-  group_map(~ .x)
-
-
-
-
-## giant timeseries plot =======================================================
-facet_label_effect <- make_facet_labels(
-  data = decomposed_timeseries_data |> filter(gauge %in% handpicked_catchments),
-  facet_column = "gauge",
-  x_axis_column = "year",
-  y_axis_column = "streamflow",
-  label_type = LETTERS,
-  hjust = 0.0005,
-  vjust = -0.2
-)
-
-plot_decomposed_timeseries <- decomposed_timeseries_data |>
-  filter(gauge %in% handpicked_catchments) |>
-  ggplot(aes(x = year, y = streamflow, shape = effect, colour = effect)) +
-  geom_line() +
-  geom_point() +
-  # geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_text(
-    mapping = aes(x = xlab, y = ylab, label = label_name),
-    data = facet_label_effect,
-    inherit.aes = FALSE,
-    fontface = "bold",
-    size = 10,
-    size.unit = "pt"
-  ) +
-  facet_wrap(~gauge, scales = "free_y") +
-  scale_colour_brewer(palette = "Dark2") +
-  theme_bw() +
-  labs(
-    y = "Climate Change Induced Shift in Streamflow (mm)",
-    x = "Year",
-    colour = NULL,
-    shape = NULL
-  ) +
-  scale_x_continuous(expand = c(0.01, 0.01)) +
-  theme(
-    legend.position = "bottom",
-    text = element_text(family = "sans", size = 9), # default fonts are serif, sans and mono, text size is in pt
-    strip.background = element_blank(), # remove facet_strip gauge numbers
-    strip.text = element_blank() # remove facet_strip gauge numbers
-  ) +
-  facet_wrap(~gauge, ncol = 1, scale = "free_y")
-
-
-plot_decomposed_timeseries
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1261,8 +1187,8 @@ total_effect_data |>
 total_effect_data |>
   pull(range_total_CC_percentage_effect) |>
   range()
-uncertainty_dot_limits <- c(1.6, 37) # HARD CODED
-uncertainty_dot_breaks <- seq(from = 1.6, to = 37, length.out = 7)
+uncertainty_dot_limits <- c(1.6, 41) # HARD CODED
+uncertainty_dot_breaks <- seq(from = 1.6, to = 41, length.out = 6)
 
 
 ### Fill variable ##############################################################
@@ -1767,7 +1693,7 @@ total_effect_data |>
   pull(range_total_rainfall_CC_percentage_effect) |> # this is wrong here
   range()
 uncertainty_dot_limits <- c(2.4, 22) # HARD CODED
-uncertainty_dot_breaks <- seq(from = 2.4, to = 22, length.out = 7) |> 
+uncertainty_dot_breaks <- seq(from = 2.4, to = 22, length.out = 6) |> 
   round(digits = 1)
 
 total_effect_data |>
