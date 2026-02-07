@@ -258,7 +258,18 @@ clean_all_data <- all_data |>
   ) |> 
   # Minimum year for start-stop index
   filter(year >= 1959) |> 
-  arrange(year, gauge, GCM, ensemble_id)
+  arrange(year, gauge, GCM, ensemble_id) |> 
+  # add saft drought algorithm. Overwrite existing drought column
+  mutate(
+    drought = case_when(
+      GCM == "observed" ~ drought, # don't have to redo it for the observed
+      .default = saft_drought_algorithm(p_mm)
+    ),
+    .by = c(GCM, ensemble_id, gauge)
+  )
+
+
+
 
 
 ### Final check - make sure GCM data is the same length as observed ############
