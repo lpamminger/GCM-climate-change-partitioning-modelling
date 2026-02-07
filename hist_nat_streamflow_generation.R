@@ -277,9 +277,16 @@ clean_all_data |>
   filter(drought != drought_v2) |> 
   summarise(
     sum_drought = sum(drought),
-    sum_drought_v2 = sum(drought_v2)
-  )
-# there are more drought years using GCM
+    sum_drought_v2 = sum(drought_v2),
+    .by = c(gauge, GCM, ensemble_id)
+  ) |> 
+  mutate(
+    diff_drought = sum_drought_v2 - sum_drought
+  ) |> 
+  pull(diff_drought) |> 
+  summary()
+# there are more drought years using GCM 
+# per gauge, GCM, ensemble it adds on median 6 extra years $\pm$ 7.2 
 
 clean_all_data <- clean_all_data |> 
   select(!drought) |> 
