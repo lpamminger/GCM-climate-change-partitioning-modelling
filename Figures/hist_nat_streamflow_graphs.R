@@ -1123,6 +1123,57 @@ sink()
 
 
 
+## Running a trend line though the decomposed impacts ==========================
+get_slope <- function(x, y, ...) {
+  lm(y ~ x, ...)$coefficients[2] |> unname() # position of slope
+}
+
+
+### Aggregate to decade ########################################################
+decade_decomposed_trends <- decomposed_timeseries_data |> 
+  # add decade column
+  mutate(
+    decade = year - (year %% 10)
+  ) |> 
+  summarise(
+    decade_streamflow = sum(streamflow),
+    years_in_decade = n(), # I am comparing the data to itself (i.e., same gauge I don't think the years differing between gauges is an issue)
+    .by = c(gauge, decade, effect)
+  ) |> 
+  # standardise decade in streamflow by years
+  mutate(
+    decade_streamflow_standardised = (decade_streamflow / years_in_decade) * 10
+  ) |>  
+  # run a trend line through decade_streamflow per year using get_slope
+  summarise(
+    decade_trend_streamflow = get_slope(x = decade, y = decade_streamflow_standardised), # multiply by 10 to convert the standardised into decade average
+    .by = c(gauge, effect)
+  )
+
+
+
+### Try running with decade change - this give almost the exact same answer as above
+yearly_decomposed_trends <- decomposed_timeseries_data |> 
+  # run a trend line through decade_streamflow per year using get_slope
+  summarise(
+    yearly_trend_streamflow = get_slope(x = year, y = streamflow),
+    .by = c(gauge, effect)
+  ) 
+
+
+
+### Stats ######################################################################
+yearly_decomposed_trends |> 
+  summarise(
+    mean_effect_mm_per_year = mean(yearly_trend_streamflow),
+    .by = effect
+  )
+
+decade_decomposed_trends |> 
+  summarise(
+    mean_effect_mm_per_decade = mean(decade_trend_streamflow),
+    .by = effect
+  )
 
 
 
