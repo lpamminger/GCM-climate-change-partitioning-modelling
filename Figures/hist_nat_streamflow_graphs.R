@@ -123,29 +123,29 @@ all_plotting_data <- rbind(hist_nat_plotting_data, obs_CO2_off_plotting_data, ob
 ### split catchments ###########################################################
 handpicked_catchments <- c("606195", "227210", "405240", "319204", "138004B")
 
-supp_catchments <- hist_nat_plotting_data |> 
-  filter(!gauge %in% handpicked_catchments) |> 
-  pull(gauge) |> 
+supp_catchments <- hist_nat_plotting_data |>
+  filter(!gauge %in% handpicked_catchments) |>
+  pull(gauge) |>
   unique()
 
 chunk <- 7
 n <- length(supp_catchments)
-split_group <- rep(rep(1:ceiling(n/chunk), each = chunk))[1:n]
+split_group <- rep(rep(1:ceiling(n / chunk), each = chunk))[1:n]
 split_tibble <- tibble(
   "gauge" = supp_catchments,
   "split" = split_group
 )
 
-supp_data <- all_plotting_data |> 
+supp_data <- all_plotting_data |>
   right_join(
     split_tibble,
     by = join_by(gauge)
   )
 
 # converting table to list by groups https://stackoverflow.com/questions/7060272/split-up-a-dataframe-by-number-of-rows
-chunked_supp_data <- supp_data |> 
-  group_by(split) |> 
-  group_map(~ .x)
+chunked_supp_data <- supp_data |>
+  group_by(split) |>
+  group_map(~.x)
 
 
 ### Make facet labels for plots ################################################
@@ -182,7 +182,7 @@ make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, 
         (range_ylab > 100) & near(ylab, 0, 10) ~ -10,
         (range_ylab < 100) & near(ylab, 0, 10) ~ -1,
         .default = ylab
-      ) 
+      )
     ) |>
     # apply hjust and vjust
     mutate(
@@ -195,10 +195,11 @@ make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, 
 #### Plot function #############################################################
 
 timeseries_plot <- function(data, envelope_data) {
-  
   # Pull gauges for envelope data
-  gauges <- data |> pull(gauge) |> unique()
-  
+  gauges <- data |>
+    pull(gauge) |>
+    unique()
+
   # create facet_labels tibble
   facet_labels <- make_facet_labels(
     data = data,
@@ -209,7 +210,7 @@ timeseries_plot <- function(data, envelope_data) {
     hjust = 0.0005,
     vjust = -0.05
   )
-  
+
   data |>
     ggplot(aes(x = year, y = median_GCM_realspace_streamflow, shape = type, colour = type)) +
     geom_ribbon(
@@ -264,14 +265,13 @@ timeseries_plot <- function(data, envelope_data) {
 }
 
 
-
 ### Main figure plot ###########################################################
 handpicked_plotting_data <- all_plotting_data |>
   filter(gauge %in% handpicked_catchments)
 
 
 main_timeseries_plot <- timeseries_plot(
-  data = handpicked_plotting_data, 
+  data = handpicked_plotting_data,
   envelope_data = hist_nat_plotting_data
 )
 
@@ -306,16 +306,18 @@ save_supp_plots <- function(ggplot_object, identifier, filename) {
 
 
 create_caption <- function(identifier, chunked_supp_data) {
-  
-  gauge <- chunked_supp_data[[identifier]] |> pull(gauge) |> unique() |> sort()
+  gauge <- chunked_supp_data[[identifier]] |>
+    pull(gauge) |>
+    unique() |>
+    sort()
   abc <- LETTERS[1:length(gauge)]
   gauge_abc <- paste0(gauge, " (", abc, ")")
   # concatenate everything but last value
   start_gauge_abc <- paste0(gauge_abc[1:(length(gauge_abc) - 2)], ", ", collapse = "")
   end_gauge_abc <- paste0(gauge_abc[(length(gauge_abc) - 1)], " and ", gauge_abc[length(gauge_abc)], ".")
   gauge_text <- paste(c(start_gauge_abc, end_gauge_abc), collapse = "")
-  
-  cat("\\begin{figure}") 
+
+  cat("\\begin{figure}")
   cat("\n")
   cat("\t\\centering")
   cat("\n")
@@ -325,12 +327,11 @@ create_caption <- function(identifier, chunked_supp_data) {
   cat(paste0("\t\\caption{\\textbf{Streamflow time series decomposing the impact of climate change into rainfall and rainfall-partitioning for gauges ", gauge_text, "} Same as Figure~\\ref{fig:chapt_5_streamflow_timeseries}.}"))
   cat("\n")
   # The line below must change
-  cat(paste0("\t\\label{fig:chapt_5_supp_streamflow_timeseries_", identifier, "}")) 
+  cat(paste0("\t\\label{fig:chapt_5_supp_streamflow_timeseries_", identifier, "}"))
   cat("\n")
   cat("\\end{figure}")
   cat("\n")
   cat("\n")
-  
 }
 
 
@@ -348,11 +349,6 @@ walk(
   chunked_supp_data = chunked_supp_data
 )
 sink()
-
-
-
-
-
 
 
 # Decompose of rainfall and CO2 partitioning on streamflow ---------------------
@@ -873,33 +869,32 @@ uncertainty_decade_specific_decomposed_impacts |>
   mean()
 
 ### Find the contributions in 2014
-uncertainty_decade_specific_decomposed_impacts |> 
-  filter(decade == 2) |> 
+uncertainty_decade_specific_decomposed_impacts |>
+  filter(decade == 2) |>
   summarise(
     sum_total_effect = sum(total_effect),
     sum_rainfall_effect = sum(rainfall_effect),
     sum_partitioning_effect = sum(partitioning_effect)
-  ) |> 
+  ) |>
   mutate(
     percent_partitioning_effect = (sum_partitioning_effect / sum_total_effect) * 100,
     percent_rainfall_effect = (sum_rainfall_effect / sum_total_effect) * 100
   )
-  
-  
+
+
 # Plot total, rainfall and partitioning effect timeseries ----------------------
 ## Total effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`
 ## Rainfall effect = `Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`
 ## Partitioning effect = `Counterfactual - Observed Precipitation` - `CO2 Model - Observed Precipitation`
 
 
-
-## Calculate uncertainty 
-uncertainty_for_decomposed_timeseries_data <- hist_nat_plotting_data |> 
-  select(!c(median_GCM_realspace_streamflow, type)) |> 
+## Calculate uncertainty
+uncertainty_for_decomposed_timeseries_data <- hist_nat_plotting_data |>
+  select(!c(median_GCM_realspace_streamflow, type)) |>
   rename(
     `MIN Counterfactual - Hist Nat Precipitation` = min_GCM_realspace_streamflow,
     `MAX Counterfactual - Hist Nat Precipitation` = max_GCM_realspace_streamflow
-  ) |> 
+  ) |>
   right_join(
     decomposing_impacts,
     by = join_by(year, gauge)
@@ -909,7 +904,7 @@ uncertainty_for_decomposed_timeseries_data <- hist_nat_plotting_data |>
     upper_rainfall_effect = `MAX Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`,
     lower_total_effect = `MIN Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`,
     lower_rainfall_effect = `MIN Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`
-  ) |> 
+  ) |>
   select(
     year,
     gauge,
@@ -917,24 +912,24 @@ uncertainty_for_decomposed_timeseries_data <- hist_nat_plotting_data |>
     lower_total_effect,
     upper_rainfall_effect,
     lower_rainfall_effect
-  ) 
+  )
 
 ### Two-step it - I don't know how to do this a in single step
-total_effect_ribbon_bounds <- uncertainty_for_decomposed_timeseries_data |> 
-  select(year, gauge, upper_total_effect, lower_total_effect) |> 
+total_effect_ribbon_bounds <- uncertainty_for_decomposed_timeseries_data |>
+  select(year, gauge, upper_total_effect, lower_total_effect) |>
   add_column(
     effect = "Total Effect"
-  ) |> 
+  ) |>
   rename(
     upper_bound = upper_total_effect,
     lower_bound = lower_total_effect
   )
 
-rainfall_effect_ribbon_bounds <- uncertainty_for_decomposed_timeseries_data |> 
-  select(year, gauge, upper_rainfall_effect, lower_rainfall_effect) |> 
+rainfall_effect_ribbon_bounds <- uncertainty_for_decomposed_timeseries_data |>
+  select(year, gauge, upper_rainfall_effect, lower_rainfall_effect) |>
   add_column(
     effect = "Rainfall Effect"
-  ) |> 
+  ) |>
   rename(
     upper_bound = upper_rainfall_effect,
     lower_bound = lower_rainfall_effect
@@ -944,7 +939,7 @@ ribbon_bounds <- rbind(total_effect_ribbon_bounds, rainfall_effect_ribbon_bounds
 
 
 ### Join uncertainty to plotting dataset
-decomposed_timeseries_data <- decomposing_impacts |> 
+decomposed_timeseries_data <- decomposing_impacts |>
   # decompose using formula above
   mutate(
     total_effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`,
@@ -962,43 +957,43 @@ decomposed_timeseries_data <- decomposing_impacts |>
       effect == "rainfall_effect" ~ "Rainfall Effect",
       effect == "total_effect" ~ "Total Effect"
     )
-  ) |> 
-  select(year, gauge, effect, streamflow) |>  
+  ) |>
+  select(year, gauge, effect, streamflow) |>
   # add uncertainty bounds
   left_join(
     ribbon_bounds,
     by = join_by(year, gauge, effect)
-  ) |> 
+  ) |>
   # multiple by negative 1 to get loss and gain correct
   mutate(
     streamflow = -1 * streamflow,
     upper_bound = -1 * upper_bound,
     lower_bound = -1 * lower_bound
-  ) 
+  )
 
-## plot and save =============================================================== 
+## plot and save ===============================================================
 
 ### split catchments ###########################################################
-supp_difference_data <- decomposed_timeseries_data |> 
+supp_difference_data <- decomposed_timeseries_data |>
   right_join(
     split_tibble,
     by = join_by(gauge)
   )
 
 # converting table to list by groups https://stackoverflow.com/questions/7060272/split-up-a-dataframe-by-number-of-rows
-chunked_difference_supp_data <- supp_difference_data |> 
-  group_by(split) |> 
-  group_map(~ .x)
-
+chunked_difference_supp_data <- supp_difference_data |>
+  group_by(split) |>
+  group_map(~.x)
 
 
 #### Plot function #############################################################
 
 timeseries_difference_plot <- function(data) {
-  
   # Pull gauges for envelope data
-  gauges <- data |> pull(gauge) |> unique()
-  
+  gauges <- data |>
+    pull(gauge) |>
+    unique()
+
   # create facet_labels tibble
   facet_labels <- make_facet_labels(
     data = data,
@@ -1009,15 +1004,15 @@ timeseries_difference_plot <- function(data) {
     hjust = 0.0005,
     vjust = -0.2
   )
-  
-  data |> 
-  ggplot(aes(x = year, y = streamflow, shape = effect, colour = effect)) +
+
+  data |>
+    ggplot(aes(x = year, y = streamflow, shape = effect, colour = effect)) +
     geom_ribbon(
-      aes(ymax = upper_bound, ymin = lower_bound, fill = effect), 
-      alpha = 0.2, 
+      aes(ymax = upper_bound, ymin = lower_bound, fill = effect),
+      alpha = 0.2,
       colour = NA,
       na.rm = FALSE
-      ) +
+    ) +
     geom_line() +
     geom_point() +
     # geom_hline(yintercept = 0, linetype = "dashed") +
@@ -1051,10 +1046,9 @@ timeseries_difference_plot <- function(data) {
 }
 
 
-
 ### Main figure plot ###########################################################
 main_decomposed_timeseries_plot <- decomposed_timeseries_data |>
-  filter(gauge %in% handpicked_catchments) |> 
+  filter(gauge %in% handpicked_catchments) |>
   timeseries_difference_plot()
 
 
@@ -1077,16 +1071,18 @@ supp_decomposed_timeseries_plots <- map(
 
 
 decomposed_create_caption <- function(identifier, chunked_supp_data) {
-  
-  gauge <- chunked_supp_data[[identifier]] |> pull(gauge) |> unique() |> sort()
+  gauge <- chunked_supp_data[[identifier]] |>
+    pull(gauge) |>
+    unique() |>
+    sort()
   abc <- LETTERS[1:length(gauge)]
   gauge_abc <- paste0(gauge, " (", abc, ")")
   # concatenate everything but last value
   start_gauge_abc <- paste0(gauge_abc[1:(length(gauge_abc) - 2)], ", ", collapse = "")
   end_gauge_abc <- paste0(gauge_abc[(length(gauge_abc) - 1)], " and ", gauge_abc[length(gauge_abc)], ".")
   gauge_text <- paste(c(start_gauge_abc, end_gauge_abc), collapse = "")
-  
-  cat("\\begin{figure}") 
+
+  cat("\\begin{figure}")
   cat("\n")
   cat("\t\\centering")
   cat("\n")
@@ -1096,12 +1092,11 @@ decomposed_create_caption <- function(identifier, chunked_supp_data) {
   cat(paste0("\t\\caption{\\textbf{Change in streamflow over time due to climate change induced changes in rainfall and rainfall-partitioning for gauges ", gauge_text, "} Same as Figure~\\ref{fig:chapt_5_cc_effect_timeseries}.}"))
   cat("\n")
   # The line below must change
-  cat(paste0("\t\\label{fig:chapt_5_supp_climate_change_effect_timeseries_", identifier, "}")) 
+  cat(paste0("\t\\label{fig:chapt_5_supp_climate_change_effect_timeseries_", identifier, "}"))
   cat("\n")
   cat("\\end{figure}")
   cat("\n")
   cat("\n")
-  
 }
 
 
@@ -1119,63 +1114,6 @@ walk(
   chunked_supp_data = chunked_difference_supp_data
 )
 sink()
-
-
-
-
-## Running a trend line though the decomposed impacts ==========================
-get_slope <- function(x, y, ...) {
-  lm(y ~ x, ...)$coefficients[2] |> unname() # position of slope
-}
-
-
-### Aggregate to decade ########################################################
-decade_decomposed_trends <- decomposed_timeseries_data |> 
-  # add decade column
-  mutate(
-    decade = year - (year %% 10)
-  ) |> 
-  summarise(
-    decade_streamflow = sum(streamflow),
-    years_in_decade = n(), # I am comparing the data to itself (i.e., same gauge I don't think the years differing between gauges is an issue)
-    .by = c(gauge, decade, effect)
-  ) |> 
-  # standardise decade in streamflow by years
-  mutate(
-    decade_streamflow_standardised = (decade_streamflow / years_in_decade) * 10
-  ) |>  
-  # run a trend line through decade_streamflow per year using get_slope
-  summarise(
-    decade_trend_streamflow = get_slope(x = decade, y = decade_streamflow_standardised), # multiply by 10 to convert the standardised into decade average
-    .by = c(gauge, effect)
-  )
-
-
-
-### Try running with decade change - this give almost the exact same answer as above
-yearly_decomposed_trends <- decomposed_timeseries_data |> 
-  # run a trend line through decade_streamflow per year using get_slope
-  summarise(
-    yearly_trend_streamflow = get_slope(x = year, y = streamflow),
-    .by = c(gauge, effect)
-  ) 
-
-
-
-### Stats ######################################################################
-yearly_decomposed_trends |> 
-  summarise(
-    mean_effect_mm_per_year = mean(yearly_trend_streamflow),
-    .by = effect
-  )
-
-decade_decomposed_trends |> 
-  summarise(
-    mean_effect_mm_per_decade = mean(decade_trend_streamflow),
-    .by = effect
-  )
-
-
 
 
 # Map of total impact ----------------------------------------------------------
@@ -1206,7 +1144,6 @@ total_effect_data <- uncertainty_decade_specific_decomposed_impacts |>
     rainfall_effect_CC_percent = relative_rainfall_effect * total_effect_CC_percent,
     partitioning_effect_CC_percent = (1 - relative_rainfall_effect) * total_effect_CC_percent
   )
-
 
 
 ## Statistics for the results ==================================================
@@ -1610,9 +1547,8 @@ ggsave(
 )
 
 
-
 # Ukkola comparison ------------------------------------------------------------
-# Calculate the streamflow reduction of all catchment from only change in 
+# Calculate the streamflow reduction of all catchment from only change in
 # rainfall-partitioning between 1982-2010
 
 ## Ukkola analysis period is 1982-2010 - filter ================================
@@ -1669,9 +1605,9 @@ areal_potential_evap_SILO_daily <- read_csv(
 rainfall_data <- read_csv(
   "Previous/Data/with_NA_yearly_data_CAMELS.csv",
   show_col_types = FALSE
-) |> 
-  select(year, gauge, p_mm) |> 
-  filter(gauge %in% high_evidence_ratio_gauges) |> 
+) |>
+  select(year, gauge, p_mm) |>
+  filter(gauge %in% high_evidence_ratio_gauges) |>
   summarise(
     mean_annual_precip = mean(p_mm),
     .by = gauge
@@ -1690,19 +1626,19 @@ aridity_ratio <- areal_potential_evap_SILO_daily |>
     annual_APET_mm = sum(APET_mm),
     n = n(),
     .by = c(year, gauge)
-  ) |> 
+  ) |>
   # find mean annual PET
   summarise(
     mean_annual_PET = mean(annual_APET_mm),
     .by = gauge
-  ) |> 
+  ) |>
   left_join(
     rainfall_data,
     by = join_by(gauge)
-  ) |> 
+  ) |>
   mutate(
     aridity = mean_annual_precip / mean_annual_PET
-  ) |> 
+  ) |>
   # UNEP's classification with Ukkola modification (see supp materials)
   # modification is sub-humid = 0.5 to 1
   # wet > 1
@@ -1717,15 +1653,14 @@ aridity_ratio <- areal_potential_evap_SILO_daily |>
   )
 
 
-
 ## Compare partitioning percentage to Ukkola's results =========================
-ukkola_all_data <- ukkola_total_effect_data |> 
+ukkola_all_data <- ukkola_total_effect_data |>
   left_join(
     aridity_ratio,
     by = join_by(gauge)
-  ) 
+  )
 
-ukkola_all_data |> 
+ukkola_all_data |>
   summarise(
     mean_partitioning_percentage_impact = mean(partitioning_effect_CC_percent) * 100,
     number_of_catchments = n(),
@@ -1734,17 +1669,16 @@ ukkola_all_data |>
   )
 
 
-
 # Total impact of climate change on streamflow using only rainfall -------------
 
-## Arguments for test_map_plot 
+## Arguments for test_map_plot
 
 
 total_effect_data |>
   pull(range_total_rainfall_CC_percentage_effect) |> # this is wrong here
   range()
 uncertainty_dot_limits <- c(2.4, 22) # HARD CODED
-uncertainty_dot_breaks <- seq(from = 2.4, to = 22, length.out = 6) |> 
+uncertainty_dot_breaks <- seq(from = 2.4, to = 22, length.out = 6) |>
   round(digits = 1)
 
 total_effect_data |>
@@ -1761,7 +1695,6 @@ rescale_colourbar <- main_variable_breaks |>
 # Need to adjust rescale_colourbar. The zero values is too blue it should be on the transition
 # edit manually - make the zero on the edge of yellow and blue. Make numbers bigger to do this
 rescale_colourbar <- c(0.0, 0.45, 0.75, 0.97, 0.99, 1.0) # n - 1
-
 
 
 ## Plots
@@ -1854,4 +1787,112 @@ total_effect_data |>
     mean_uncertainty = mean(range_total_rainfall_CC_percentage_effect),
     .by = c(decade, state)
   )
-  arrange(state, decade)
+arrange(state, decade)
+
+
+# Trends -----------------------------------------------------------------------
+## Running a trend line though the decomposed impacts ==========================
+get_slope <- function(x, y, ...) {
+  lm(y ~ x, ...)$coefficients[2] |> unname() # position of slope
+}
+
+### Annual streamflow total ####################################################
+## Total effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`
+## Rainfall effect = `Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`
+## Partitioning effect = `Counterfactual - Observed Precipitation` - `CO2 Model - Observed Precipitation`
+
+decadal_streamflow <- all_plotting_data |>
+  filter(gauge %in% high_evidence_ratio_gauges) |>
+  # add decade column
+  mutate(
+    decade = year - (year %% 10)
+  ) |>
+  summarise(
+    decade_streamflow = sum(median_GCM_realspace_streamflow),
+    n = n(),
+    .by = c(gauge, decade, type)
+  ) |>
+  # standardise streamflow
+  mutate(
+    decade_streamflow_total = (decade_streamflow / n) * 10
+  ) |>
+  # remove columns
+  select(!c(decade_streamflow, n)) |>
+  pivot_wider(
+    names_from = type,
+    values_from = decade_streamflow_total
+  ) |>
+  mutate(
+    total_effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`,
+    rainfall_effect =  `Counterfactual - Hist Nat Precipitation` - `Counterfactual - Observed Precipitation`,
+    partitioning_effect = `Counterfactual - Observed Precipitation` - `CO2 Model - Observed Precipitation`
+  ) |>
+  mutate(
+    relative_partitioning_effect = if_else(total_effect > partitioning_effect, partitioning_effect / total_effect, total_effect / partitioning_effect),
+    # assume relative_rainfall_effect is complementary
+    relative_rainfall_effect = 1 - relative_partitioning_effect
+  ) |> 
+  # account for total effect percentage change uncertainty
+  mutate(
+    total_effect_CC_percent = if_else(
+      total_effect < partitioning_effect,
+      total_effect / `Counterfactual - Hist Nat Precipitation`,
+      -total_effect / `Counterfactual - Hist Nat Precipitation`
+    ) * 100,
+    rainfall_total_effect_CC_percent = total_effect_CC_percent * relative_rainfall_effect
+  )
+
+
+### Aggregate to decade ########################################################
+decade_decomposed_trends <- decomposed_timeseries_data |>
+  # add decade column
+  mutate(
+    decade = year - (year %% 10)
+  ) |>
+  summarise(
+    decade_streamflow = sum(streamflow),
+    years_in_decade = n(), # I am comparing the data to itself (i.e., same gauge I don't think the years differing between gauges is an issue)
+    .by = c(gauge, decade, effect)
+  ) |>
+  # standardise decade in streamflow by years
+  mutate(
+    decade_streamflow_standardised = (decade_streamflow / years_in_decade) * 10 # multiply by 10 to convert the standardised into decade average
+  ) |>
+  # run a trend line through decade_streamflow per year using get_slope
+  summarise(
+    decade_trend_streamflow = get_slope(x = decade, y = decade_streamflow_standardised),
+    .by = c(gauge, effect)
+  )
+
+
+### Try running with decade change - this give almost the exact same answer as above
+yearly_decomposed_trends <- decomposed_timeseries_data |>
+  # run a trend line through decade_streamflow per year using get_slope
+  summarise(
+    yearly_trend_streamflow = get_slope(x = year, y = streamflow),
+    .by = c(gauge, effect)
+  )
+
+
+### Stats ######################################################################
+yearly_decomposed_trends |>
+  summarise(
+    mean_effect_mm_per_year = mean(yearly_trend_streamflow),
+    .by = effect
+  )
+
+decade_decomposed_trends |>
+  summarise(
+    mean_effect_mm_per_decade = mean(decade_trend_streamflow),
+    .by = effect
+  )
+
+decadal_streamflow |>
+  pull(total_effect_CC_percent) |>
+  mean(na.rm = T)
+
+
+decadal_streamflow |>
+  pull(rainfall_total_effect_CC_percent) |>
+  mean(na.rm = T)
+
