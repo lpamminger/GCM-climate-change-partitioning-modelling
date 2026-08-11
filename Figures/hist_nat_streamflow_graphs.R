@@ -149,7 +149,7 @@ chunked_supp_data <- supp_data |>
 
 
 ### Make facet labels for plots ################################################
-new_make_facet_labels <- function(data, constant_x_position, label_type, vjust) {
+new_make_facet_labels <- function(data, constant_x_position, piv_cols, label_type, vjust) {
   # if my ylab is 800 vs. -100
   # I want to move the label down 20 %. Therefore vjust would be 0.8
   # 800 * 0.8 = 640 --> moves it down
@@ -157,21 +157,21 @@ new_make_facet_labels <- function(data, constant_x_position, label_type, vjust) 
   # if ylab is -ve then -100 * (0.8 - 1) + -100 = 
   # what if ylab is zero - nothing happends - print message
   
-  
+
   facet_labels <- data |>
     pivot_longer(
-      cols = ends_with("streamflow"),
+      cols = all_of(piv_cols),
       names_to = "streamflow_type",
       values_to = "streamflow_value"
     ) |> 
     summarise(
       ylab = max(streamflow_value, na.rm = TRUE),
       .by = gauge
-    ) 
+    ) |> 
+    mutate(
+      near_zero = near(ylab, 0, tol = 0.1)
+    )
   
-  if(any((facet_labels |> pull(ylab)) == 0)) {
-    message("ylab is equal to zero. Vjust will do nothing")
-  }
   
   facet_labels |> 
     # Add xlab - constant x-axis
@@ -192,53 +192,11 @@ new_make_facet_labels <- function(data, constant_x_position, label_type, vjust) 
       ylab = if_else(ylab > 0, ylab * vjust, ylab + (ylab * (1 - vjust)))
     )
   
-    
-    
-}
-
-make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, label_type = LETTERS, hjust = 0, vjust = 0) {
-  # The embrace operator does not work correctly in summarise i.e., max({{ y_axis_column }})
-  # Link: https://forum.posit.co/t/embrace-operator-for-tidy-selection-vs-data-masking/173084
-  # Possible cause: {{ y_axis_column }} isn't unquoting when it's doing the mutate
-  # Work around using rlang::ensym
-
   
-  browser()
-  col <- rlang::ensym(y_axis_column)
-
-  data |>
-    summarise(
-      ylab = max(!!col),
-      min_ylab = min(!!col),
-      .by = {{ facet_column }}
-    ) |>
-    # Add xlab - constant x-axis
-    add_column(
-      xlab = data |> pull(x_axis_column) |> min(),
-      .before = 2
-    ) |> # add row numbers to tibble
-    mutate(
-      row_number = row_number(),
-      .before = 1
-    ) |> # add label type based on row number
-    mutate(
-      label_name = label_type[row_number]
-    ) |>
-    # set zero values to -1 the adjustment works
-    mutate(
-      range_ylab = abs(ylab - min_ylab),
-      ylab = case_when(
-        (range_ylab > 100) & near(ylab, 0, 10) ~ -10,
-        (range_ylab < 100) & near(ylab, 0, 10) ~ -1,
-        .default = ylab
-      )
-    ) |>
-    # apply hjust and vjust
-    mutate(
-      xlab = if_else(xlab > 0, xlab + (xlab * hjust), xlab + (xlab * -hjust)),
-      ylab = if_else(ylab > 0, ylab + (ylab * vjust), ylab + (ylab * -vjust))
-    )
+  
 }
+
+
 
 
 #### Plot function #############################################################
@@ -253,6 +211,7 @@ timeseries_plot <- function(data, envelope_data) {
   facet_labels <- new_make_facet_labels(
     data = data,
     constant_x_position = 1959,
+    piv_cols = c("median_GCM_realspace_streamflow", "max_GCM_realspace_streamflow", "min_GCM_realspace_streamflow"),
     vjust = 0.9,
     label_type = LETTERS[1:length(gauges)]
   )
@@ -420,6 +379,7 @@ decomposing_impacts <- all_plotting_data |>
     values_from = median_GCM_realspace_streamflow
   ) |>
   drop_na()
+
 # decompose using formula above
 # mutate(
 #  total_effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`,
@@ -497,6 +457,7 @@ GCM_streamflow_data <- hist_nat_streamflow_data |>
     sum_counterfactual_hist_nat = sum(median_ensemble_realspace_streamflow),
     .by = c(decade, gauge, GCM)
   )
+
 
 # 3. Total effect = `Counterfactual - Hist Nat Precipitation` - `CO2 Model - Observed Precipitation`
 ## join decade specific decomposed impacts
@@ -1041,17 +1002,19 @@ timeseries_difference_plot <- function(data) {
     unique()
 
   # create facet_labels tibble
-  facet_labels <- make_facet_labels(
+  facet_labels <- new_make_facet_labels(
     data = data,
-    facet_column = "gauge",
-    x_axis_column = "year",
-    y_axis_column = "streamflow",
-    label_type = LETTERS[1:length(gauges)],
-    hjust = 0.0005,
-    vjust = -0.2
-  )
+    constant_x_position = 1959,
+    piv_cols = c("streamflow", "upper_bound", "lower_bound"),
+    vjust = 0.9,
+    label_type = LETTERS[1:length(gauges)]
+  ) 
+
 
   data |>
+    mutate(
+      effect = factor(effect, levels = c("Rainfall-Partitioning Effect", "Rainfall Effect", "Total Effect"))
+    ) |> 
     ggplot(aes(x = year, y = streamflow, shape = effect, colour = effect)) +
     geom_ribbon(
       aes(ymax = upper_bound, ymin = lower_bound, fill = effect),
@@ -1081,7 +1044,8 @@ timeseries_difference_plot <- function(data) {
       shape = NULL,
       fill = NULL
     ) +
-    scale_x_continuous(expand = c(0.01, 0.01)) +
+    scale_x_continuous(expand = c(0.01, 0.01), limits = c(1958, 2014)) +
+    scale_y_continuous(expand = c(0.1, 0)) + # expand y-axis by 10 %. This helps with figure labels
     theme(
       legend.position = "bottom",
       text = element_text(family = "sans", size = 9), # default fonts are serif, sans and mono, text size is in pt
@@ -1096,6 +1060,7 @@ timeseries_difference_plot <- function(data) {
 main_decomposed_timeseries_plot <- decomposed_timeseries_data |>
   filter(gauge %in% handpicked_catchments) |>
   timeseries_difference_plot()
+
 
 
 ggsave(
