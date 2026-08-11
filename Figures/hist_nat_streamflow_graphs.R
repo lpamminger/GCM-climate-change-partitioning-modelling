@@ -149,12 +149,61 @@ chunked_supp_data <- supp_data |>
 
 
 ### Make facet labels for plots ################################################
+new_make_facet_labels <- function(data, constant_x_position, label_type, vjust) {
+  # if my ylab is 800 vs. -100
+  # I want to move the label down 20 %. Therefore vjust would be 0.8
+  # 800 * 0.8 = 640 --> moves it down
+  # -100 * 0.8 = -80 --> moves it up
+  # if ylab is -ve then -100 * (0.8 - 1) + -100 = 
+  # what if ylab is zero - nothing happends - print message
+  
+  
+  facet_labels <- data |>
+    pivot_longer(
+      cols = ends_with("streamflow"),
+      names_to = "streamflow_type",
+      values_to = "streamflow_value"
+    ) |> 
+    summarise(
+      ylab = max(streamflow_value, na.rm = TRUE),
+      .by = gauge
+    ) 
+  
+  if(any((facet_labels |> pull(ylab)) == 0)) {
+    message("ylab is equal to zero. Vjust will do nothing")
+  }
+  
+  facet_labels |> 
+    # Add xlab - constant x-axis
+    add_column(
+      xlab = constant_x_position,
+      .before = 2
+    ) |>
+    # add row numbers to tibble
+    mutate(
+      row_number = row_number(),
+      .before = 1
+    ) |> # add label type based on row number
+    mutate(
+      label_name = label_type[row_number]
+    ) |> 
+    # apply vjust
+    mutate(
+      ylab = if_else(ylab > 0, ylab * vjust, ylab + (ylab * (1 - vjust)))
+    )
+  
+    
+    
+}
+
 make_facet_labels <- function(data, facet_column, x_axis_column, y_axis_column, label_type = LETTERS, hjust = 0, vjust = 0) {
   # The embrace operator does not work correctly in summarise i.e., max({{ y_axis_column }})
   # Link: https://forum.posit.co/t/embrace-operator-for-tidy-selection-vs-data-masking/173084
   # Possible cause: {{ y_axis_column }} isn't unquoting when it's doing the mutate
   # Work around using rlang::ensym
 
+  
+  browser()
   col <- rlang::ensym(y_axis_column)
 
   data |>
@@ -201,14 +250,11 @@ timeseries_plot <- function(data, envelope_data) {
     unique()
 
   # create facet_labels tibble
-  facet_labels <- make_facet_labels(
+  facet_labels <- new_make_facet_labels(
     data = data,
-    facet_column = "gauge",
-    x_axis_column = "year",
-    y_axis_column = "median_GCM_realspace_streamflow",
-    label_type = LETTERS[1:length(gauges)],
-    hjust = 0.0005,
-    vjust = -0.05
+    constant_x_position = 1959,
+    vjust = 0.9,
+    label_type = LETTERS[1:length(gauges)]
   )
 
   data |>
@@ -254,7 +300,7 @@ timeseries_plot <- function(data, envelope_data) {
       colour = NULL,
       shape = NULL
     ) +
-    scale_x_continuous(expand = c(0.01, 0.01)) +
+    scale_x_continuous(expand = c(0.01, 0.01), limits = c(1958, 2014)) +
     theme(
       legend.position = "bottom",
       text = element_text(family = "sans", size = 9), # default fonts are serif, sans and mono, text size is in pt
