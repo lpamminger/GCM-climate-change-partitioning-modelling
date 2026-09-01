@@ -90,6 +90,8 @@ convert_from_kg_per_m2_per_s_to_mm_month <- function(precipitation_kg_per_m2_per
 cool_seasons <- seq(from = 4, to = 9, by = 1)
 warm_seasons <- c(10, 11, 12, 1, 2, 3)
 
+
+
 simplify_GCM_data <- function(file_names, chunk) {
   gc()
 
@@ -146,7 +148,7 @@ simplify_GCM_data <- function(file_names, chunk) {
     summarise(
       season_precipitation_mm = sum(precipitation_mm),
       .by = c(year, GCM, ensemble_id, experiment, realisation, gauge, season)
-    ) |>
+    ) |> 
     write_parquet(
       sink = paste0("./Data/Tidy/GCMs/precip_chunk_", chunk, ".parquet")
     )
@@ -172,6 +174,7 @@ iwalk(
   .f = simplify_GCM_data
 )
 
+
 ## Step 2. Combine chunked files and save a larger file ========================
 ### and Remove chunked files
 ### Limited RAM means I cannot do step 1 and 2 together
@@ -194,4 +197,5 @@ write_dataset(
   format = "parquet"
 )
 
-# Remove GCMs folder manually
+# Remove GCMs folder 
+unlink("./Data/Tidy/GCMs", recursive = TRUE)
